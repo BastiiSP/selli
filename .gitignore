@@ -12,3 +12,6 @@ captures/
 
 # Enthält vertrauliche Werte (u.a. den ICS-Feed-Link mit Zugriffstoken) — niemals committen.
 secrets.properties
+
+# Rohausgabe der Bildgenerierung — erst manuell kuratierte Assets landen unter res/.
+/tools/generate-assets/output/
