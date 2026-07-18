@@ -1,6 +1,8 @@
 package com.prehmus.selli.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -12,16 +14,20 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.R
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.theme.personColor
 import com.prehmus.selli.ui.theme.selliGradient
 
 /**
- * Platzhalter-Avatar: Kreis in der Personenfarbe mit Initial. Wird später durch
- * die illustrierten Avatare (gleiche Bildsprache wie das Maskottchen) ersetzt.
+ * Illustrierter Avatar (gleiche Bildsprache wie das Maskottchen, aus der
+ * einmaligen Bildgenerierung) mit Ring in der Personenfarbe.
  */
 @Composable
 fun PersonAvatar(
@@ -29,18 +35,17 @@ fun PersonAvatar(
     modifier: Modifier = Modifier,
     size: Dp = 32.dp,
 ) {
-    Box(
+    Image(
+        painter = painterResource(
+            if (person == Person.MELLI) R.drawable.avatar_melli else R.drawable.avatar_basti
+        ),
+        contentDescription = if (person == Person.MELLI) "Melli" else "Basti",
+        contentScale = ContentScale.Crop,
         modifier = modifier
             .size(size)
-            .background(personColor(person), CircleShape),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = if (person == Person.MELLI) "M" else "B",
-            style = MaterialTheme.typography.labelLarge,
-            color = Color.White,
-        )
-    }
+            .clip(CircleShape)
+            .border(2.dp, personColor(person), CircleShape),
+    )
 }
 
 /** Beide Avatare leicht überlappend — "unsere kleine gemeinsame Welt". */

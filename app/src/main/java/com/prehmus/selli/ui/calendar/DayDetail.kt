@@ -148,7 +148,7 @@ private fun EmptyDay(bothFree: Boolean, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         SelliMascot(
-            mood = if (bothFree) MascotMood.HAPPY else MascotMood.NEUTRAL,
+            mood = if (bothFree) MascotMood.HAPPY else MascotMood.EMPTY,
             modifier = Modifier.size(72.dp),
         )
         Text(
