@@ -15,3 +15,6 @@ secrets.properties
 
 # Rohausgabe der Bildgenerierung — erst manuell kuratierte Assets landen unter res/.
 /tools/generate-assets/output/
+
+# Enthält den OpenAI-API-Key fürs Asset-Tool — niemals committen.
+/tools/generate-assets/.env

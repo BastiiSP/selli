@@ -7,15 +7,19 @@ per OpenAI-Bildgenerierung — siehe Designkonzept in `../../CLAUDE.md`.
 
 1. Eigenen OpenAI-API-Key besorgen (platform.openai.com) — **niemals ins Repo oder in einen
    Chat einfügen**.
-2. Lokal setzen, z. B. nur für die aktuelle Terminal-Session:
+2. `.env.example` nach `.env` kopieren (im selben Ordner) und den echten Key eintragen:
    ```bash
-   export OPENAI_API_KEY="sk-..."
+   cd tools/generate-assets
+   cp .env.example .env
+   # .env öffnen und OPENAI_API_KEY=... eintragen
    ```
+   `.env` ist in `.gitignore` ausgeschlossen und wird nie committet.
 
 ## Ausführen
 
 ```bash
 cd tools/generate-assets
+set -a && source .env && set +a   # Key nur für diese Shell-Session laden
 python3 generate_assets.py                 # alle Assets
 python3 generate_assets.py mascot_idle      # nur ein einzelnes Asset
 ```

@@ -6,8 +6,9 @@ Kein Laufzeit-Feature der App — läuft nur hier lokal, um statische Bilddateie
 die anschließend manuell (nach Sichtung/Auswahl) unter app/src/main/res/drawable-.../ einsortiert
 werden. Siehe Designkonzept in CLAUDE.md ("Asset-Produktion").
 
-Setup:
-    export OPENAI_API_KEY="sk-..."      # nie ins Repo, nie in den Chat einfügen
+Setup (siehe README.md für Details):
+    cp .env.example .env && $EDITOR .env   # eigenen Key eintragen, nie committen/chatten
+    set -a && source .env && set +a
     python3 tools/generate-assets/generate_assets.py            # alle Assets
     python3 tools/generate-assets/generate_assets.py mascot_empty_state   # nur ein Asset
 
