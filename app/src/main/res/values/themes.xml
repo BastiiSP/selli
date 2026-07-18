@@ -1,0 +1,6 @@
+<resources>
+    <!-- Basis-Android-Theme fürs Manifest; die eigentliche Compose-Theming-Logik lebt in
+         ui/theme/Theme.kt (SelliTheme). Diese XML dient nur als App-Startup-Theme
+         (z. B. Splash-Hintergrund vor dem ersten Compose-Frame). -->
+    <style name="Theme.Selli" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

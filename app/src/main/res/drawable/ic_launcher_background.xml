@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Platzhalter-Hintergrund: Lila-Grün-Gradient laut Designkonzept.
+     Wird ersetzt, sobald das per OpenAI-Bildgenerierung erzeugte Maskottchen-Icon steht. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="135"
+        android:startColor="#8E6BBF"
+        android:endColor="#4C9A6A"
+        android:type="linear" />
+</shape>

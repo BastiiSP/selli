@@ -1,0 +1,14 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Enthält vertrauliche Werte (u.a. den ICS-Feed-Link mit Zugriffstoken) — niemals committen.
+secrets.properties
