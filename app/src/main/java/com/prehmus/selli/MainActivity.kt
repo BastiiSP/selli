@@ -5,23 +5,23 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import com.prehmus.selli.ui.SelliApp
-import com.prehmus.selli.ui.preview.PreviewDependencies
 import com.prehmus.selli.ui.theme.SelliTheme
 
 /**
- * Einstiegspunkt: baut die Abhängigkeiten und übergibt sie an [SelliApp].
- * Aktuell laufen hier noch die Preview-Fakes — die Verdrahtung auf die echten
- * Codex-Implementierungen (Google Calendar, ICS, Merge) folgt, sobald deren
- * Konstruktor-Signaturen final sind (Phase 3 des MVP-Handovers).
+ * Einstiegspunkt: baut die produktiven Abhängigkeiten (Google Calendar, ICS,
+ * Merge — Implementierungen Owner Codex) und übergibt sie an [SelliApp].
  */
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val dependencies = PreviewDependencies()
+        val dependencies = DefaultAppDependencies(this)
         setContent {
             SelliTheme {
-                SelliApp(dependencies = dependencies)
+                SelliApp(
+                    dependencies = dependencies,
+                    rememberOwnPerson = dependencies::rememberOwnPerson,
+                )
             }
         }
     }
