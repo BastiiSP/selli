@@ -11,8 +11,17 @@ Vollständiges Projekt- und Designkonzept liegt in Bastis privatem Obsidian-Vaul
 ## Setup
 
 1. Projekt in Android Studio öffnen (Gradle-Sync läuft beim ersten Öffnen automatisch)
-2. `local.properties` lokal um die benötigten, nicht versionierten Werte ergänzen (Google-OAuth-Client-Konfiguration, ICS-Feed-URL) — Details siehe Handover-Prompt/Vault-Notiz
+2. `local.properties` lokal um die benötigten, nicht versionierten Werte ergänzen (Google-OAuth-Client-Konfiguration, ICS-Feed-URL)
 3. Build & Run über Android Studio oder `./gradlew assembleDebug`
+
+### Lokale Konfiguration
+
+Diese Werte gehören lokal in `local.properties` und werden als `BuildConfig`-Felder bereitgestellt. Keine dieser Angaben wird versioniert:
+
+```properties
+selli.googleServerClientId=...
+selli.icsFeedUrl=...
+```
 
 ## Konventionen
 
