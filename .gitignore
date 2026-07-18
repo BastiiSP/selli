@@ -18,3 +18,5 @@ secrets.properties
 
 # Enthält den OpenAI-API-Key fürs Asset-Tool — niemals committen.
 /tools/generate-assets/.env
+# Editor-Sicherungsdateien (z. B. von nano) könnten Reste vertraulicher Werte enthalten.
+*.save
