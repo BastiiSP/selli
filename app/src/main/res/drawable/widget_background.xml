@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Weiche, abgerundete Widget-Karte statt eckigem Kasten ("warm eingekleidet").
+     Als Shape-Drawable, damit die Rundung auch unter Android < 12 greift
+     (GlanceModifier.cornerRadius wirkt erst ab S). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners android:radius="24dp" />
+    <solid android:color="@color/widget_background" />
+</shape>

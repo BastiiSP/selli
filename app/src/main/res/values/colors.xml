@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget-Farben: Pendants zu ui/theme/Color.kt (WarmSurface bzw. Personenfarben),
+     als Ressourcen, weil RemoteViews-Drawables keine Compose-Farben kennen.
+     Dark-Mode-Werte liegen in values-night/colors.xml. -->
+<resources>
+    <color name="widget_background">#FFFDFA</color>
+    <color name="person_melli">#7E58B4</color>
+    <color name="person_basti">#3E8A5C</color>
+</resources>

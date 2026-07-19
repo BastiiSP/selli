@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark-Mode-Pendants: NightSurface und die entsättigten Personenfarben aus Color.kt. -->
+<resources>
+    <color name="widget_background">#221D23</color>
+    <color name="person_melli">#B49BD9</color>
+    <color name="person_basti">#7FC79A</color>
+</resources>

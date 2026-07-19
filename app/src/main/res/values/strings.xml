@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Selli</string>
+    <string name="widget_label">Selli — Nächster Termin</string>
+    <string name="widget_description">Zeigt auf dem Homescreen, was dein Lieblingsmensch als Nächstes vorhat.</string>
 </resources>
