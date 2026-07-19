@@ -30,8 +30,10 @@ import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
+import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.LocalDateTime
 import java.time.ZoneId
 import kotlinx.coroutines.CoroutineDispatcher
@@ -53,7 +55,7 @@ class GoogleCalendarDataRepository(
         Context.MODE_PRIVATE,
     ),
     logger: CalendarLogger = NoOpCalendarLogger,
-) : GoogleCalendarRepository, CalendarRepository {
+) : GoogleCalendarRepository, CalendarRepository, SessionRepository {
     private val credentialManager = CredentialManager.create(context.applicationContext)
     private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
 
@@ -196,6 +198,18 @@ class GoogleCalendarDataRepository(
             }
         }
 
+    override suspend fun sessionState(): SessionState =
+        sessionState(
+            ownAccount = storedAccount(OWN_PREFIX),
+            partnerAccount = storedAccount(PARTNER_PREFIX),
+        )
+
+    override suspend fun resetSession() {
+        preferences.edit().apply {
+            sessionKeysToReset(preferences.all.keys).forEach { remove(it) }
+        }.apply()
+    }
+
     private suspend fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
 
     private suspend fun <T> runGoogleApiCatching(block: suspend () -> T): Result<T> =
@@ -323,3 +337,15 @@ class GoogleCalendarDataRepository(
             "Google braucht einmalig deine Zustimmung für den Kalenderzugriff."
     }
 }
+
+internal fun sessionState(ownAccount: Account?, partnerAccount: Account?): SessionState =
+    when {
+        ownAccount == null -> SessionState.SignedOut
+        partnerAccount == null -> SessionState.NeedsPartner(ownAccount)
+        else -> SessionState.Linked(ownAccount, partnerAccount)
+    }
+
+internal fun sessionKeysToReset(keys: Set<String>): Set<String> =
+    keys.filterTo(mutableSetOf()) { key ->
+        key.startsWith("own_") || key.startsWith("partner_")
+    }
