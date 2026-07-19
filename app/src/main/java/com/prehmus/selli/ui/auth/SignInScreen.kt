@@ -1,5 +1,8 @@
 package com.prehmus.selli.ui.auth
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +48,7 @@ fun SignInScreen(
     state: AuthUiState,
     onSignIn: (Person) -> Unit,
     onConnectPartner: (String) -> Unit,
+    onConsentResult: (granted: Boolean, partnerEmail: String) -> Unit,
     onDismissError: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,6 +93,7 @@ fun SignInScreen(
             is AuthUiState.ConnectPartner -> ConnectPartnerStep(
                 state = state,
                 onConnectPartner = onConnectPartner,
+                onConsentResult = onConsentResult,
             )
             is AuthUiState.Ready -> Unit // SelliApp wechselt zur Kalenderansicht.
         }
@@ -180,8 +186,20 @@ private fun PersonChoice(person: Person, selected: Boolean, onClick: () -> Unit)
 private fun ConnectPartnerStep(
     state: AuthUiState.ConnectPartner,
     onConnectPartner: (String) -> Unit,
+    onConsentResult: (granted: Boolean, partnerEmail: String) -> Unit,
 ) {
     var partnerEmail by rememberSaveable { mutableStateOf("") }
+
+    // Erstzugriffs-Consent der Google Calendar API (taucht typischerweise beim
+    // allerersten Freigabe-Call auf): Dialog öffnen, danach automatisch weitermachen.
+    val consentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        onConsentResult(result.resultCode == Activity.RESULT_OK, partnerEmail)
+    }
+    LaunchedEffect(state.pendingConsent) {
+        state.pendingConsent?.let(consentLauncher::launch)
+    }
 
     Text(
         text = "Hallo ${state.account.displayName}! Wie lautet die Google-E-Mail deines Lieblingsmenschen?",

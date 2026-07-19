@@ -1,8 +1,10 @@
 package com.prehmus.selli.ui.calendar
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
@@ -26,6 +28,8 @@ data class CalendarUiState(
     val isCreateSheetOpen: Boolean = false,
     val isSavingEvent: Boolean = false,
     val userMessage: String? = null,
+    /** Google verlangt beim Erstzugriff einmalig Zustimmung — dieser Intent öffnet den Dialog. */
+    val pendingConsent: Intent? = null,
 ) {
     val selectedDayEvents: List<CalendarEvent>
         get() = eventsByDay[selectedDay].orEmpty()
@@ -68,11 +72,16 @@ class CalendarViewModel(
                 _uiState.update { it.copy(isSyncing = false, eventsByDay = events.groupByDay()) }
                 refreshBothFree(_uiState.value.selectedDay)
             }.onFailure { error ->
-                _uiState.update {
-                    it.copy(
-                        isSyncing = false,
-                        userMessage = error.message ?: "Kalender konnten nicht geladen werden.",
-                    )
+                when (error) {
+                    is GoogleRecoverableAuthException -> _uiState.update {
+                        it.copy(isSyncing = false, pendingConsent = error.recoveryIntent)
+                    }
+                    else -> _uiState.update {
+                        it.copy(
+                            isSyncing = false,
+                            userMessage = error.message ?: "Kalender konnten nicht geladen werden.",
+                        )
+                    }
                 }
             }
         }
@@ -128,6 +137,21 @@ class CalendarViewModel(
     }
 
     fun consumeUserMessage() = _uiState.update { it.copy(userMessage = null) }
+
+    /**
+     * Ergebnis des Google-Consent-Dialogs (Erstzugriff auf die Calendar API):
+     * nach erteilter Zustimmung lädt Selli sofort weiter — ohne Neustart.
+     */
+    fun onConsentResult(granted: Boolean) {
+        _uiState.update { it.copy(pendingConsent = null) }
+        if (granted) {
+            refresh()
+        } else {
+            _uiState.update {
+                it.copy(userMessage = "Ohne Google-Zustimmung kann Selli eure Kalender nicht laden.")
+            }
+        }
+    }
 
     companion object {
         fun factory(

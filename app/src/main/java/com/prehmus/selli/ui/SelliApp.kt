@@ -40,6 +40,7 @@ fun SelliApp(
             state = authState,
             onSignIn = authViewModel::signIn,
             onConnectPartner = authViewModel::connectPartner,
+            onConsentResult = authViewModel::onConsentResult,
             onDismissError = authViewModel::dismissError,
         )
     }

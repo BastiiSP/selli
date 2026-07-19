@@ -1,5 +1,8 @@
 package com.prehmus.selli.ui.calendar
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -38,6 +41,17 @@ fun CalendarScreen(
             snackbarHostState.showSnackbar(message)
             viewModel.consumeUserMessage()
         }
+    }
+
+    // Erstzugriffs-Consent der Google Calendar API: Dialog sichtbar öffnen,
+    // nach Zustimmung lädt der ViewModel-Callback direkt weiter.
+    val consentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        viewModel.onConsentResult(result.resultCode == Activity.RESULT_OK)
+    }
+    LaunchedEffect(uiState.pendingConsent) {
+        uiState.pendingConsent?.let(consentLauncher::launch)
     }
 
     Scaffold(

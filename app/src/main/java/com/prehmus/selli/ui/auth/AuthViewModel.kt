@@ -1,8 +1,10 @@
 package com.prehmus.selli.ui.auth
 
+import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.Person
@@ -26,6 +28,8 @@ sealed interface AuthUiState {
         val account: Account,
         val isConnecting: Boolean = false,
         val errorMessage: String? = null,
+        /** Google verlangt beim Erstzugriff einmalig Zustimmung — dieser Intent öffnet den Dialog. */
+        val pendingConsent: Intent? = null,
     ) : AuthUiState
 
     /** Beide Kalender verknüpft — die App kann losbelegen. */
@@ -80,11 +84,36 @@ class AuthViewModel(
             googleCalendarRepository.grantMutualAccess(current.account, partner)
                 .onSuccess { _uiState.value = AuthUiState.Ready(current.account) }
                 .onFailure { error ->
-                    _uiState.value = current.copy(
-                        isConnecting = false,
-                        errorMessage = error.message ?: "Freigabe fehlgeschlagen — bitte nochmal versuchen.",
-                    )
+                    _uiState.value = when (error) {
+                        // Erstzugriffs-Consent: Dialog öffnen lassen statt still zu scheitern.
+                        is GoogleRecoverableAuthException -> current.copy(
+                            isConnecting = false,
+                            errorMessage = null,
+                            pendingConsent = error.recoveryIntent,
+                        )
+                        else -> current.copy(
+                            isConnecting = false,
+                            errorMessage = error.message ?: "Freigabe fehlgeschlagen — bitte nochmal versuchen.",
+                        )
+                    }
                 }
+        }
+    }
+
+    /**
+     * Ergebnis des Google-Consent-Dialogs: nach Zustimmung wird die
+     * Partner-Verknüpfung ohne Neustart erneut angestoßen.
+     */
+    fun onConsentResult(granted: Boolean, partnerEmail: String) {
+        val current = _uiState.value as? AuthUiState.ConnectPartner ?: return
+        if (granted) {
+            _uiState.value = current.copy(pendingConsent = null)
+            connectPartner(partnerEmail)
+        } else {
+            _uiState.value = current.copy(
+                pendingConsent = null,
+                errorMessage = "Ohne Zustimmung kann Selli eure Kalender nicht verbinden — versuch es nochmal.",
+            )
         }
     }
 
