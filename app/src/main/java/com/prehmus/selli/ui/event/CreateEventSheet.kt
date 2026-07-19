@@ -34,6 +34,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.prehmus.selli.domain.model.NewCalendarEvent
+import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.Instant
 import java.time.LocalDate
@@ -164,7 +165,7 @@ fun CreateEventSheet(
                     Text(
                         text = if (isSaving) "Speichert …" else "Termin anlegen",
                         style = MaterialTheme.typography.labelLarge,
-                        color = Color.White,
+                        color = onAccentColor(),
                     )
                 }
             }

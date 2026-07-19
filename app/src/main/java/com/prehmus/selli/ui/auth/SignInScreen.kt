@@ -36,6 +36,7 @@ import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.components.MascotMood
 import com.prehmus.selli.ui.components.PersonAvatar
 import com.prehmus.selli.ui.components.SelliMascot
+import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.personColor
 import com.prehmus.selli.ui.theme.selliGradient
 
@@ -137,7 +138,7 @@ private fun SignInStep(
             Text(
                 text = "Mit Google anmelden",
                 style = MaterialTheme.typography.labelLarge,
-                color = Color.White,
+                color = onAccentColor(),
             )
         }
     }

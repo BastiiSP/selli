@@ -21,11 +21,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.ui.components.CoupleAvatars
 import com.prehmus.selli.ui.components.MascotMood
 import com.prehmus.selli.ui.components.SelliMascot
+import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.YearMonth
 import java.time.format.TextStyle
@@ -69,7 +69,7 @@ fun MascotHeader(
                 Text(
                     text = "Selli",
                     style = MaterialTheme.typography.headlineSmall,
-                    color = Color.White,
+                    color = onAccentColor(),
                     modifier = Modifier.weight(1f),
                 )
                 CoupleAvatars(size = 34.dp)
@@ -87,19 +87,19 @@ fun MascotHeader(
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                                 contentDescription = "Voriger Monat",
-                                tint = Color.White,
+                                tint = onAccentColor(),
                             )
                         }
                         Text(
                             text = "${month.month.getDisplayName(TextStyle.FULL, Locale.GERMAN)} ${month.year}",
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White,
+                            color = onAccentColor(),
                         )
                         IconButton(onClick = onNextMonth) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = "Nächster Monat",
-                                tint = Color.White,
+                                tint = onAccentColor(),
                             )
                         }
                     }
@@ -108,7 +108,7 @@ fun MascotHeader(
                 Box(
                     modifier = Modifier
                         .size(76.dp)
-                        .background(Color.White.copy(alpha = 0.18f), CircleShape),
+                        .background(onAccentColor().copy(alpha = 0.18f), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     SelliMascot(mood = mood, modifier = Modifier.size(60.dp))
@@ -129,7 +129,7 @@ private fun HeaderStatusLine(isSyncing: Boolean, bothFree: Boolean, modifier: Mo
         Text(
             text = text,
             style = MaterialTheme.typography.labelLarge,
-            color = Color.White.copy(alpha = 0.95f),
+            color = onAccentColor().copy(alpha = 0.95f),
             modifier = modifier.padding(start = 12.dp),
         )
     }

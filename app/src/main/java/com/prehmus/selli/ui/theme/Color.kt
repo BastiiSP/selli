@@ -61,6 +61,17 @@ fun personSoftColor(person: Person): Color {
 }
 
 /**
+ * Text-/Icon-Farbe auf den kräftigen Akzentflächen (Personenfarben, selliGradient):
+ * Weiß im Light Mode; im Dark Mode sind die Personenfarben pastellig-hell,
+ * dort braucht es dunkle Tinte für die 4,5:1-Kontrastgrenze.
+ */
+@Composable
+@ReadOnlyComposable
+fun onAccentColor(): Color = onAccentColor(isSystemInDarkTheme())
+
+fun onAccentColor(darkTheme: Boolean): Color = if (darkTheme) NightBackground else Color.White
+
+/**
  * Der Lila-Grün-Verlauf: App-weites Branding-Element (Header, Splash) und
  * zugleich die dritte Kennung für gemeinsam erstellte Termine.
  */

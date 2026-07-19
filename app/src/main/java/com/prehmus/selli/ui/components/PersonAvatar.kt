@@ -15,13 +15,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.personColor
 import com.prehmus.selli.ui.theme.selliGradient
 
@@ -81,7 +81,7 @@ fun PersonPill(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = Color.White,
+            color = onAccentColor(),
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
         )
     }

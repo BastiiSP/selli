@@ -1,8 +1,12 @@
 package com.prehmus.selli.ui
 
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.prehmus.selli.AppDependencies
 import com.prehmus.selli.domain.model.Person
@@ -26,22 +30,29 @@ fun SelliApp(
     )
     val authState by authViewModel.uiState.collectAsState()
 
-    when (authState) {
-        is AuthUiState.Ready -> {
-            val calendarViewModel: CalendarViewModel = viewModel(
-                factory = CalendarViewModel.factory(
-                    dependencies.calendarMergeService,
-                    dependencies.calendarRepository,
-                ),
+    // Surface als Wurzel setzt LocalContentColor auf onBackground — ohne sie bleibt
+    // Text ohne explizite Farbe schwarz und ist im Dark Mode unlesbar.
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        when (authState) {
+            is AuthUiState.Ready -> {
+                val calendarViewModel: CalendarViewModel = viewModel(
+                    factory = CalendarViewModel.factory(
+                        dependencies.calendarMergeService,
+                        dependencies.calendarRepository,
+                    ),
+                )
+                CalendarScreen(viewModel = calendarViewModel)
+            }
+            else -> SignInScreen(
+                state = authState,
+                onSignIn = authViewModel::signIn,
+                onConnectPartner = authViewModel::connectPartner,
+                onConsentResult = authViewModel::onConsentResult,
+                onDismissError = authViewModel::dismissError,
             )
-            CalendarScreen(viewModel = calendarViewModel)
         }
-        else -> SignInScreen(
-            state = authState,
-            onSignIn = authViewModel::signIn,
-            onConnectPartner = authViewModel::connectPartner,
-            onConsentResult = authViewModel::onConsentResult,
-            onDismissError = authViewModel::dismissError,
-        )
     }
 }
