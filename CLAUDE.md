@@ -64,11 +64,11 @@ Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und 
 
 ## Bekannter Stand (Stand 19.07.2026)
 
-MVP-Kern ist fertig: Google-Kalender-Anbindung inkl. automatischer ACL-Freigabe, ICS-Arbeitskalender mit eigenem RFC-5545-Parser, Zusammenführungslogik inkl. `isBothFree`, komplette Kalender-UI, finale Illustrationen eingebunden. 24 Unit-Tests grün. Bekannte offene Punkte:
-- „Recoverable auth flow" (Consent-Dialog) beim allerersten Google-Calendar-API-Zugriff ist noch nicht in der UI abgefangen
-- `isBothFree` sehr streng (siehe Designkonzept oben)
+MVP-Kern ist fertig: Google-Kalender-Anbindung inkl. automatischer ACL-Freigabe, ICS-Arbeitskalender mit eigenem RFC-5545-Parser, Zusammenführungslogik inkl. `isBothFree`, komplette Kalender-UI, Homescreen-Widget, finale Illustrationen (inkl. Avataren mit echter Ähnlichkeit) eingebunden. Consent-Flow abgefangen, erster Verbinden-Crash (Google-Konto-Auswahl) und Dark-Mode-Textkontrast behoben. 35 Unit-Tests grün. Bekannte offene Punkte:
+- `isBothFree` verfeinert (≥3h zusammenhängender freier Block, 9–22 Uhr), aber noch nicht end-to-end am echten Gerät durchgetestet
 - MONTHLY/YEARLY-RRULEs aus dem ICS-Feed erscheinen bewusst nur als Einzeltermin am Startdatum (dokumentierte Einschränkung, kein Bug)
 - App-Icon-Vordergrund evtl. zu randvoll für manche Launcher-Masken (siehe Designkonzept oben)
+- Merkregel: Text/Icons auf `selliGradient()`- oder `personColor()`-Flächen nie hart `Color.White` geben, sondern `onAccentColor()` verwenden (Dark-Mode-Kontrast)
 
 ## Claudian-Update-Format
 
