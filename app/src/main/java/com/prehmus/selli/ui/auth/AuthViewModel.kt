@@ -8,7 +8,9 @@ import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
+import com.prehmus.selli.domain.repository.SessionRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,6 +22,9 @@ import kotlinx.coroutines.launch
  * Teilen in den Google-Einstellungen nötig).
  */
 sealed interface AuthUiState {
+    /** Beim App-Start: prüft, ob eine gespeicherte Verknüpfung wiederhergestellt werden kann. */
+    data object Restoring : AuthUiState
+
     data object SignedOut : AuthUiState
     data object SigningIn : AuthUiState
 
@@ -40,16 +45,53 @@ sealed interface AuthUiState {
 
 class AuthViewModel(
     private val googleCalendarRepository: GoogleCalendarRepository,
+    private val sessionRepository: SessionRepository,
     /**
      * Meldet der Verdrahtung (MainActivity), als wer sich die Person angemeldet hat —
      * der personResolver der Google-Anbindung liest diesen Wert. Die UI fragt das
      * vor dem Sign-in ab ("Wer bist du?"), weil signIn() laut Vertrag parameterlos ist.
+     * Beim Wiederherstellen einer gespeicherten Sitzung liefert das gespeicherte
+     * Konto die Person, ohne dass erneut gefragt wird.
      */
     private val rememberOwnPerson: (Person) -> Unit = {},
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.SignedOut)
+    private val _uiState = MutableStateFlow<AuthUiState>(AuthUiState.Restoring)
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
+
+    init {
+        restoreSession()
+    }
+
+    private fun restoreSession() {
+        viewModelScope.launch {
+            val session = runCatching { sessionRepository.sessionState() }
+                .getOrDefault(SessionState.SignedOut)
+            _uiState.value = when (session) {
+                is SessionState.Linked -> {
+                    rememberOwnPerson(session.ownAccount.person)
+                    AuthUiState.Ready(session.ownAccount)
+                }
+                is SessionState.NeedsPartner -> {
+                    rememberOwnPerson(session.ownAccount.person)
+                    AuthUiState.ConnectPartner(session.ownAccount)
+                }
+                SessionState.SignedOut -> AuthUiState.SignedOut
+            }
+        }
+    }
+
+    /**
+     * "Konto wechseln": vergisst nur Sellis eigenen Verknüpfungsstatus auf diesem
+     * Gerät und springt zurück zum Anfang der Anmeldekette — das Google-Konto
+     * selbst bleibt unberührt.
+     */
+    fun switchAccount() {
+        viewModelScope.launch {
+            runCatching { sessionRepository.resetSession() }
+            _uiState.value = AuthUiState.SignedOut
+        }
+    }
 
     fun signIn(ownPerson: Person) {
         if (_uiState.value is AuthUiState.SigningIn) return
@@ -126,11 +168,12 @@ class AuthViewModel(
     companion object {
         fun factory(
             googleCalendarRepository: GoogleCalendarRepository,
+            sessionRepository: SessionRepository,
             rememberOwnPerson: (Person) -> Unit = {},
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                AuthViewModel(googleCalendarRepository, rememberOwnPerson) as T
+                AuthViewModel(googleCalendarRepository, sessionRepository, rememberOwnPerson) as T
         }
     }
 }

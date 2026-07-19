@@ -2,6 +2,7 @@ package com.prehmus.selli.ui.event
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +12,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -33,7 +36,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import com.prehmus.selli.domain.model.EventRecurrence
 import com.prehmus.selli.domain.model.NewCalendarEvent
+import com.prehmus.selli.domain.model.RecurrenceFrequency
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.Instant
@@ -68,8 +73,14 @@ fun CreateEventSheet(
     var endTime by remember { mutableStateOf(LocalTime.of(19, 0)) }
     var showDatePicker by remember { mutableStateOf(false) }
     var timePickerTarget by remember { mutableStateOf<TimeTarget?>(null) }
+    // Wiederholung: Google verwaltet die Serie nativ (RRULE) — die App legt keine Einzeltermine an.
+    var recurrenceFrequency by rememberSaveable { mutableStateOf<RecurrenceFrequency?>(null) }
+    var recurrenceUntil by remember { mutableStateOf<LocalDate?>(null) }
+    var showUntilDatePicker by remember { mutableStateOf(false) }
 
-    val isValid = title.isNotBlank() && (isAllDay || endTime.isAfter(startTime))
+    val isRecurrenceValid = recurrenceFrequency == null ||
+        recurrenceUntil == null || !recurrenceUntil!!.isBefore(day)
+    val isValid = title.isNotBlank() && (isAllDay || endTime.isAfter(startTime)) && isRecurrenceValid
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -128,6 +139,24 @@ fun CreateEventSheet(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            RecurrencePicker(
+                frequency = recurrenceFrequency,
+                until = recurrenceUntil,
+                onFrequencyChange = { frequency ->
+                    recurrenceFrequency = frequency
+                    if (frequency == null) recurrenceUntil = null
+                },
+                onPickUntil = { showUntilDatePicker = true },
+                onClearUntil = { recurrenceUntil = null },
+            )
+            if (!isRecurrenceValid) {
+                Text(
+                    text = "Das Serienende darf nicht vor dem ersten Termin liegen.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+
             LabeledSwitch(
                 label = "Partner einladen — wird ein gemeinsamer Termin",
                 checked = invitePartner,
@@ -146,6 +175,9 @@ fun CreateEventSheet(
                             isAllDay = isAllDay,
                             location = location.trim().ifBlank { null },
                             invitePartner = invitePartner,
+                            recurrence = recurrenceFrequency?.let {
+                                EventRecurrence(frequency = it, until = recurrenceUntil)
+                            },
                         )
                     )
                 },
@@ -169,6 +201,29 @@ fun CreateEventSheet(
                     )
                 }
             }
+        }
+    }
+
+    if (showUntilDatePicker) {
+        val untilPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = (recurrenceUntil ?: day)
+                .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showUntilDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    untilPickerState.selectedDateMillis?.let {
+                        recurrenceUntil = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                    }
+                    showUntilDatePicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showUntilDatePicker = false }) { Text("Abbrechen") }
+            },
+        ) {
+            DatePicker(state = untilPickerState)
         }
     }
 
@@ -229,6 +284,76 @@ fun CreateEventSheet(
 }
 
 private enum class TimeTarget { START, END }
+
+private fun RecurrenceFrequency?.label(): String = when (this) {
+    null -> "Nie"
+    RecurrenceFrequency.DAILY -> "Täglich"
+    RecurrenceFrequency.WEEKLY -> "Wöchentlich"
+    RecurrenceFrequency.MONTHLY -> "Monatlich"
+    RecurrenceFrequency.YEARLY -> "Jährlich"
+}
+
+/**
+ * Wiederholungs-Auswahl: Häufigkeit plus optionales Serienende. Google
+ * verwaltet die Serie nativ — hier wird nur der Wunsch erfasst.
+ */
+@Composable
+private fun RecurrencePicker(
+    frequency: RecurrenceFrequency?,
+    until: LocalDate?,
+    onFrequencyChange: (RecurrenceFrequency?) -> Unit,
+    onPickUntil: () -> Unit,
+    onClearUntil: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var frequencyMenuOpen by remember { mutableStateOf(false) }
+    var untilMenuOpen by remember { mutableStateOf(false) }
+
+    Row(modifier = modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(modifier = Modifier.weight(1f)) {
+            OutlinedButton(onClick = { frequencyMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text("Wiederholung: ${frequency.label()}")
+            }
+            DropdownMenu(expanded = frequencyMenuOpen, onDismissRequest = { frequencyMenuOpen = false }) {
+                (listOf<RecurrenceFrequency?>(null) + RecurrenceFrequency.entries).forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option.label()) },
+                        onClick = {
+                            frequencyMenuOpen = false
+                            onFrequencyChange(option)
+                        },
+                    )
+                }
+            }
+        }
+
+        if (frequency != null) {
+            Box(modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { untilMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(until?.let { "Bis ${it.format(UntilFormat)}" } ?: "Endet: nie")
+                }
+                DropdownMenu(expanded = untilMenuOpen, onDismissRequest = { untilMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text("Endet: nie") },
+                        onClick = {
+                            untilMenuOpen = false
+                            onClearUntil()
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text("An einem Datum …") },
+                        onClick = {
+                            untilMenuOpen = false
+                            onPickUntil()
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private val UntilFormat = DateTimeFormatter.ofPattern("d.M.yyyy", Locale.GERMAN)
 
 @Composable
 private fun LabeledSwitch(

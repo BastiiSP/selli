@@ -78,6 +78,14 @@ fun SignInScreen(
         )
 
         when (state) {
+            AuthUiState.Restoring -> {
+                CircularProgressIndicator()
+                Text(
+                    text = "Selli erinnert sich an euch …",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
             is AuthUiState.SignedOut, is AuthUiState.SignInError -> SignInStep(
                 errorMessage = (state as? AuthUiState.SignInError)?.message,
                 onSignIn = onSignIn,

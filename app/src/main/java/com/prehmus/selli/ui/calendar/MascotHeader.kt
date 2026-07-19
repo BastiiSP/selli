@@ -14,11 +14,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -44,6 +51,8 @@ fun MascotHeader(
     bothFreeOnSelectedDay: Boolean,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
+    onManageCustomizations: () -> Unit,
+    onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val mood = when {
@@ -73,6 +82,10 @@ fun MascotHeader(
                     modifier = Modifier.weight(1f),
                 )
                 CoupleAvatars(size = 34.dp)
+                HeaderMenu(
+                    onManageCustomizations = onManageCustomizations,
+                    onSwitchAccount = onSwitchAccount,
+                )
             }
 
             Row(
@@ -114,6 +127,42 @@ fun MascotHeader(
                     SelliMascot(mood = mood, modifier = Modifier.size(60.dp))
                 }
             }
+        }
+    }
+}
+
+/** Überlaufmenü im Header: Verwaltung der lokalen Anpassungen und "Konto wechseln". */
+@Composable
+private fun HeaderMenu(
+    onManageCustomizations: () -> Unit,
+    onSwitchAccount: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = modifier) {
+        IconButton(onClick = { expanded = true }) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "Menü",
+                tint = onAccentColor(),
+            )
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Ausgeblendet & angepasst") },
+                onClick = {
+                    expanded = false
+                    onManageCustomizations()
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Konto wechseln …") },
+                onClick = {
+                    expanded = false
+                    onSwitchAccount()
+                },
+            )
         }
     }
 }

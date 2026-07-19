@@ -1,0 +1,126 @@
+package com.prehmus.selli.ui.event
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.ui.components.MascotMood
+import com.prehmus.selli.ui.components.SelliMascot
+import java.time.format.DateTimeFormatter
+import java.util.Locale
+
+private val FromDateFormat = DateTimeFormatter.ofPattern("d. MMMM yyyy", Locale.GERMAN)
+
+/**
+ * Verwaltung aller lokal gespeicherten Ausblendungen und Anpassungen — der
+ * einzige Weg, ausgeblendete Termine wieder sichtbar zu machen. Einträge
+ * betreffen nur Sellis Ansicht, nie den echten Google-Kalender.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CustomizationManagerSheet(
+    customizations: List<EventCustomization>,
+    onRemove: (CustomizationTarget) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .navigationBarsPadding()
+                .padding(bottom = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = "Ausgeblendet & angepasst",
+                style = MaterialTheme.typography.headlineSmall,
+            )
+            Text(
+                text = "Diese Änderungen gelten nur in Selli. Entfernst du einen Eintrag, zeigt Selli wieder das Original aus dem Kalender.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (customizations.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    SelliMascot(mood = MascotMood.EMPTY, modifier = Modifier.size(72.dp))
+                    Text(
+                        text = "Nichts ausgeblendet, nichts angepasst.",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(customizations, key = { it.target.toString() }) { customization ->
+                        CustomizationRow(customization = customization, onRemove = onRemove)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CustomizationRow(
+    customization: EventCustomization,
+    onRemove: (CustomizationTarget) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = customization.label.ifBlank { "Unbenannter Termin" },
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = buildString {
+                        append(if (customization.hidden) "Ausgeblendet" else "Angepasst")
+                        val target = customization.target
+                        if (target is CustomizationTarget.SeriesFrom) {
+                            append(" · Serie ab ${target.fromStart.toLocalDate().format(FromDateFormat)}")
+                        }
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { onRemove(customization.target) }) {
+                Text(if (customization.hidden) "Einblenden" else "Zurücksetzen")
+            }
+        }
+    }
+}

@@ -2,8 +2,10 @@ package com.prehmus.selli
 
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.SessionRepository
 
 /**
  * Verdrahtungspunkt zwischen UI (Claude) und Logik (Codex): MainActivity baut
@@ -15,4 +17,6 @@ interface AppDependencies {
     val icsCalendarRepository: IcsCalendarRepository
     val calendarMergeService: CalendarMergeService
     val calendarRepository: CalendarRepository
+    val sessionRepository: SessionRepository
+    val eventCustomizationRepository: EventCustomizationRepository
 }

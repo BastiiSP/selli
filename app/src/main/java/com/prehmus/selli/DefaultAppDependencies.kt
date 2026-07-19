@@ -1,6 +1,7 @@
 package com.prehmus.selli
 
 import androidx.activity.ComponentActivity
+import com.prehmus.selli.data.customization.FileEventCustomizationRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
@@ -8,8 +9,10 @@ import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.SessionRepository
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -37,12 +40,21 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
 
     override val icsCalendarRepository: IcsCalendarRepository = OkHttpIcsCalendarRepository()
 
+    // Lokale Ausblendungen/Anpassungen: liegen nur auf dem Gerät und werden im
+    // Merge über die frischen Rohdaten gelegt — der Google-Kalender bleibt unberührt.
+    override val eventCustomizationRepository: EventCustomizationRepository =
+        FileEventCustomizationRepository(context = activity.applicationContext)
+
     override val calendarMergeService: CalendarMergeService =
         DefaultCalendarMergeService(
             googleCalendarRepository = googleRepository,
             icsCalendarRepository = icsCalendarRepository,
+            customizationRepository = eventCustomizationRepository,
             logger = AndroidCalendarLogger,
         )
 
     override val calendarRepository: CalendarRepository = googleRepository
+
+    // Die Google-Anbindung persistiert die Konten bereits — sie ist zugleich die Session-Quelle.
+    override val sessionRepository: SessionRepository = googleRepository
 }

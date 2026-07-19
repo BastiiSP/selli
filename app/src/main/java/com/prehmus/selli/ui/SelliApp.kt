@@ -26,7 +26,11 @@ fun SelliApp(
     rememberOwnPerson: (Person) -> Unit = {},
 ) {
     val authViewModel: AuthViewModel = viewModel(
-        factory = AuthViewModel.factory(dependencies.googleCalendarRepository, rememberOwnPerson),
+        factory = AuthViewModel.factory(
+            dependencies.googleCalendarRepository,
+            dependencies.sessionRepository,
+            rememberOwnPerson,
+        ),
     )
     val authState by authViewModel.uiState.collectAsState()
 
@@ -42,9 +46,13 @@ fun SelliApp(
                     factory = CalendarViewModel.factory(
                         dependencies.calendarMergeService,
                         dependencies.calendarRepository,
+                        dependencies.eventCustomizationRepository,
                     ),
                 )
-                CalendarScreen(viewModel = calendarViewModel)
+                CalendarScreen(
+                    viewModel = calendarViewModel,
+                    onSwitchAccount = authViewModel::switchAccount,
+                )
             }
             else -> SignInScreen(
                 state = authState,

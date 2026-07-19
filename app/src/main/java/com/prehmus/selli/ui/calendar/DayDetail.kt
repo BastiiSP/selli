@@ -41,6 +41,7 @@ fun DayDetail(
     day: LocalDate,
     events: List<CalendarEvent>,
     bothFree: Boolean,
+    onEventClick: (CalendarEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxSize()) {
@@ -61,7 +62,7 @@ fun DayDetail(
                 ),
             ) {
                 items(events, key = { "${it.source}:${it.id}" }) { event ->
-                    EventCard(event = event)
+                    EventCard(event = event, onClick = { onEventClick(event) })
                 }
             }
         }
@@ -69,13 +70,14 @@ fun DayDetail(
 }
 
 @Composable
-private fun EventCard(event: CalendarEvent, modifier: Modifier = Modifier) {
+private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 1.dp,
         shadowElevation = 2.dp,
+        onClick = onClick,
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -100,22 +102,31 @@ private fun EventCard(event: CalendarEvent, modifier: Modifier = Modifier) {
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text = buildString {
-                        append(
-                            if (event.isAllDay) "Ganztägig"
-                            else "${event.start.toLocalTime().format(TimeFormat)} – ${event.end.toLocalTime().format(TimeFormat)}"
-                        )
-                        event.location?.takeIf { it.isNotBlank() }?.let { append("  ·  $it") }
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = buildString {
+                            if (event.seriesId != null) {
+                                // Serien-Vorkommen: kleines Wiederholungszeichen vor der Zeit.
+                                append("↻  ")
+                            }
+                            append(
+                                if (event.isAllDay) "Ganztägig"
+                                else "${event.start.toLocalTime().format(TimeFormat)} – ${event.end.toLocalTime().format(TimeFormat)}"
+                            )
+                            event.location?.takeIf { it.isNotBlank() }?.let { append("  ·  $it") }
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
                 if (event.source == CalendarSource.WORK_ICS) {
                     WorkBadge()
+                }
+                if (event.isCustomized) {
+                    CustomizedBadge()
                 }
             }
         }
@@ -134,6 +145,23 @@ private fun WorkBadge(modifier: Modifier = Modifier) {
             text = "Arbeit",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}
+
+/** Kennzeichnung für Termine, die nur in Sellis Ansicht angepasst wurden. */
+@Composable
+private fun CustomizedBadge(modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.tertiaryContainer,
+    ) {
+        Text(
+            text = "Angepasst",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
         )
     }

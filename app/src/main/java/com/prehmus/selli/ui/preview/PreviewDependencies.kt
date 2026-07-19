@@ -6,12 +6,17 @@ import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -100,6 +105,27 @@ class PreviewDependencies : AppDependencies {
                 day >= event.start.toLocalDate() && day <= event.end.toLocalDate()
             }
     }
+
+    override val sessionRepository: SessionRepository = object : SessionRepository {
+        override suspend fun sessionState(): SessionState = SessionState.SignedOut
+        override suspend fun resetSession() = Unit
+    }
+
+    override val eventCustomizationRepository: EventCustomizationRepository =
+        object : EventCustomizationRepository {
+            private val stored = mutableListOf<EventCustomization>()
+
+            override suspend fun save(customization: EventCustomization) {
+                stored.removeAll { it.target == customization.target }
+                stored += customization
+            }
+
+            override suspend fun remove(target: CustomizationTarget) {
+                stored.removeAll { it.target == target }
+            }
+
+            override suspend fun all(): List<EventCustomization> = stored.toList()
+        }
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {
         override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> {
