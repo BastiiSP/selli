@@ -327,6 +327,7 @@ class IcsCalendarParser(
                 isSharedEvent = false,
                 location = location,
                 description = description,
+                seriesId = uid,
             )
         }
     }

@@ -33,6 +33,8 @@ data class CalendarEvent(
     val isSharedEvent: Boolean,
     val location: String? = null,
     val description: String? = null,
+    val seriesId: String? = null,
+    val isCustomized: Boolean = false,
 )
 
 data class NewCalendarEvent(

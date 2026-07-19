@@ -33,6 +33,7 @@ class GoogleCalendarEventMapper(
             isSharedEvent = event.isSharedByAttendees(ownEmail, partnerEmail) || event.hasSelliSharedProperty(),
             location = event.location,
             description = event.description,
+            seriesId = event.recurringEventId,
         )
     }
 

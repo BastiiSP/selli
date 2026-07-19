@@ -6,8 +6,13 @@ import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarAuthRequiredException
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.domain.model.EventFieldOverrides
+import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import java.time.LocalDate
@@ -159,6 +164,224 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_hidesMatchingOccurrence() = runTest {
+        val hidden = event(id = "hidden")
+        val visible = event(id = "visible")
+        val service = service(
+            googleEvents = listOf(hidden, visible),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(
+                        EventKey(hidden.source, hidden.id),
+                    ),
+                    hidden = true,
+                ),
+            ),
+        )
+
+        assertEquals(listOf(visible), service.mergedEvents(testRange))
+    }
+
+    @Test
+    fun mergedEvents_hidesSeriesFromBoundaryWithoutHidingPastOccurrences() = runTest {
+        val past = event(id = "past", start = dateTime(hour = 9), seriesId = "series")
+        val boundary = event(id = "boundary", start = dateTime(hour = 10), seriesId = "series")
+        val future = event(id = "future", start = dateTime(hour = 11), seriesId = "series")
+        val service = service(
+            googleEvents = listOf(past, boundary, future),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        source = CalendarSource.GOOGLE_OWN,
+                        seriesId = "series",
+                        fromStart = boundary.start,
+                    ),
+                    hidden = true,
+                ),
+            ),
+        )
+
+        assertEquals(listOf(past), service.mergedEvents(testRange))
+    }
+
+    @Test
+    fun mergedEvents_appliesOccurrenceFieldsIncludingDateAndTimes() = runTest {
+        val original = event(
+            id = "occurrence",
+            title = "Original",
+            start = dateTime(hour = 10),
+            end = dateTime(hour = 11),
+        )
+        val newDay = testDay.plusDays(1)
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(
+                        title = "Changed",
+                        date = newDay,
+                        startTime = java.time.LocalTime.of(14, 30),
+                        endTime = java.time.LocalTime.of(16, 0),
+                        location = "New place",
+                        description = "New description",
+                    ),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals("Changed", customized.title)
+        assertEquals(newDay.atTime(14, 30), customized.start)
+        assertEquals(newDay.atTime(16, 0), customized.end)
+        assertEquals("New place", customized.location)
+        assertEquals("New description", customized.description)
+        assertTrue(customized.isCustomized)
+    }
+
+    @Test
+    fun mergedEvents_usesLatestMatchingSeriesCustomizationAndIgnoresItsDate() = runTest {
+        val occurrence = event(id = "occurrence", start = dateTime(hour = 12), seriesId = "series")
+        val service = service(
+            googleEvents = listOf(occurrence),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        occurrence.source,
+                        "series",
+                        dateTime(hour = 9),
+                    ),
+                    overrides = EventFieldOverrides(title = "Older"),
+                ),
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        occurrence.source,
+                        "series",
+                        dateTime(hour = 11),
+                    ),
+                    overrides = EventFieldOverrides(
+                        title = "Latest",
+                        date = testDay.plusDays(2),
+                    ),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals("Latest", customized.title)
+        assertEquals(occurrence.start, customized.start)
+    }
+
+    @Test
+    fun mergedEvents_doesNotMarkEventCustomizedWhenOnlyIgnoredSeriesDateIsSet() = runTest {
+        val occurrence = event(id = "occurrence", seriesId = "series")
+        val service = service(
+            googleEvents = listOf(occurrence),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        occurrence.source,
+                        "series",
+                        occurrence.start,
+                    ),
+                    overrides = EventFieldOverrides(date = testDay.plusDays(1)),
+                ),
+            ),
+        )
+
+        assertEquals(occurrence, service.mergedEvents(testRange).single())
+    }
+
+    @Test
+    fun mergedEvents_occurrenceCustomizationTakesPrecedenceOverSeriesCustomization() = runTest {
+        val occurrence = event(id = "occurrence", seriesId = "series")
+        val service = service(
+            googleEvents = listOf(occurrence),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        occurrence.source,
+                        "series",
+                        occurrence.start.minusDays(1),
+                    ),
+                    hidden = true,
+                ),
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(occurrence.source, occurrence.id)),
+                    overrides = EventFieldOverrides(title = "Visible override"),
+                ),
+            ),
+        )
+
+        assertEquals("Visible override", service.mergedEvents(testRange).single().title)
+    }
+
+    @Test
+    fun mergedEvents_movesAllDayDatesAndIgnoresTimeOverrides() = runTest {
+        val original = event(
+            id = "all-day",
+            start = testDay.atStartOfDay(),
+            end = testDay.plusDays(2).atStartOfDay(),
+            isAllDay = true,
+        )
+        val newDay = testDay.plusDays(5)
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(
+                        date = newDay,
+                        startTime = java.time.LocalTime.NOON,
+                        endTime = java.time.LocalTime.of(13, 0),
+                    ),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals(newDay.atStartOfDay(), customized.start)
+        assertEquals(newDay.plusDays(2).atStartOfDay(), customized.end)
+        assertTrue(customized.isCustomized)
+    }
+
+    @Test
+    fun mergedEvents_doesNotMarkAllDayEventCustomizedForIgnoredTimeOverridesOnly() = runTest {
+        val original = event(
+            id = "all-day",
+            start = testDay.atStartOfDay(),
+            end = testDay.plusDays(1).atStartOfDay(),
+            isAllDay = true,
+        )
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(startTime = java.time.LocalTime.NOON),
+                ),
+            ),
+        )
+
+        assertEquals(original, service.mergedEvents(testRange).single())
+    }
+
+    @Test
+    fun mergedEvents_returnsUnchangedEventsAndLogsWhenCustomizationLoadingFails() = runTest {
+        val original = event(id = "original")
+        val logger = FakeCalendarLogger()
+        val service = service(
+            googleEvents = listOf(original),
+            customizationFailure = IllegalStateException("Customizations unavailable"),
+            logger = logger,
+        )
+
+        assertEquals(listOf(original), service.mergedEvents(testRange))
+        assertEquals("Event customizations", logger.errors.single().source)
+        assertEquals("Customizations unavailable", logger.errors.single().cause.message)
+    }
+
+    @Test
     fun isBothFree_returnsTrueWhenDayIsEmpty() = runTest {
         val service = service()
 
@@ -280,11 +503,33 @@ class DefaultCalendarMergeServiceTest {
         assertTrue(result)
     }
 
+    @Test
+    fun isBothFree_ignoresLocallyHiddenEvents() = runTest {
+        val blocking = event(
+            id = "blocking",
+            start = dateTime(hour = 9),
+            end = dateTime(hour = 22),
+        )
+        val service = service(
+            googleEvents = listOf(blocking),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(blocking.source, blocking.id)),
+                    hidden = true,
+                ),
+            ),
+        )
+
+        assertTrue(service.isBothFree(testDay))
+    }
+
     private fun service(
         googleEvents: List<CalendarEvent> = emptyList(),
         icsEvents: List<CalendarEvent> = emptyList(),
         googleFailure: Throwable? = null,
         icsFailure: Throwable? = null,
+        customizations: List<EventCustomization> = emptyList(),
+        customizationFailure: Throwable? = null,
         logger: CalendarLogger = FakeCalendarLogger(),
     ): DefaultCalendarMergeService =
         DefaultCalendarMergeService(
@@ -296,8 +541,22 @@ class DefaultCalendarMergeServiceTest {
                 events = icsEvents,
                 failure = icsFailure,
             ),
+            customizationRepository = FakeEventCustomizationRepository(
+                customizations = customizations,
+                failure = customizationFailure,
+            ),
             logger = logger,
         )
+
+    private fun customization(
+        target: CustomizationTarget,
+        hidden: Boolean = false,
+        overrides: EventFieldOverrides = EventFieldOverrides(),
+    ): EventCustomization = EventCustomization(
+        target = target,
+        hidden = hidden,
+        overrides = overrides,
+    )
 
     private class FakeCalendarLogger : CalendarLogger {
         val errors = mutableListOf<LoggedError>()
@@ -317,6 +576,7 @@ class DefaultCalendarMergeServiceTest {
         isAllDay: Boolean = false,
         source: CalendarSource = CalendarSource.GOOGLE_OWN,
         owner: Person = Person.BASTI,
+        seriesId: String? = null,
     ): CalendarEvent =
         CalendarEvent(
             id = id,
@@ -327,7 +587,22 @@ class DefaultCalendarMergeServiceTest {
             source = source,
             owner = owner,
             isSharedEvent = false,
+            seriesId = seriesId,
         )
+
+    private class FakeEventCustomizationRepository(
+        private val customizations: List<EventCustomization>,
+        private val failure: Throwable?,
+    ) : EventCustomizationRepository {
+        override suspend fun save(customization: EventCustomization) = Unit
+
+        override suspend fun remove(target: CustomizationTarget) = Unit
+
+        override suspend fun all(): List<EventCustomization> {
+            failure?.let { throw it }
+            return customizations
+        }
+    }
 
     private class FakeGoogleCalendarRepository(
         private val events: List<CalendarEvent>,

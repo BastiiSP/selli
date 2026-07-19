@@ -5,9 +5,15 @@ import com.prehmus.selli.domain.logging.CalendarLogger
 import com.prehmus.selli.domain.logging.NoOpCalendarLogger
 import com.prehmus.selli.domain.model.CalendarAuthRequiredException
 import com.prehmus.selli.domain.model.CalendarEvent
+import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.domain.model.EventFieldOverrides
+import com.prehmus.selli.domain.model.EventKey
+import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.NoOpEventCustomizationRepository
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -19,6 +25,8 @@ import kotlinx.coroutines.coroutineScope
 class DefaultCalendarMergeService(
     private val googleCalendarRepository: GoogleCalendarRepository,
     private val icsCalendarRepository: IcsCalendarRepository,
+    private val customizationRepository: EventCustomizationRepository =
+        NoOpEventCustomizationRepository,
     private val logger: CalendarLogger = NoOpCalendarLogger,
 ) : CalendarMergeService {
 
@@ -30,12 +38,105 @@ class DefaultCalendarMergeService(
             fetchEventsOrEmpty(ICS_SOURCE) { icsCalendarRepository.fetchEvents(range) }
         }
 
-        (googleEvents.await() + icsEvents.await())
+        val merged = (googleEvents.await() + icsEvents.await())
             .distinctBy { event -> event.id to event.source }
+
+        applyCustomizationsOrOriginal(merged)
             .sortedWith(
                 compareByDescending<CalendarEvent> { event -> event.isAllDay }
                     .thenBy { event -> event.start },
             )
+    }
+
+    private suspend fun applyCustomizationsOrOriginal(
+        events: List<CalendarEvent>,
+    ): List<CalendarEvent> {
+        val customizations = try {
+            customizationRepository.all()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.error(CUSTOMIZATION_SOURCE, exception)
+            return events
+        }
+
+        val occurrenceCustomizations = customizations
+            .mapNotNull { customization ->
+                val target = customization.target as? CustomizationTarget.Occurrence
+                    ?: return@mapNotNull null
+                target.key to customization
+            }
+            .toMap()
+        val seriesCustomizations = customizations.filter {
+            it.target is CustomizationTarget.SeriesFrom
+        }
+
+        return events.mapNotNull { event ->
+            val customization = occurrenceCustomizations[EventKey(event.source, event.id)]
+                ?: seriesCustomizations.latestMatchFor(event)
+
+            when {
+                customization == null -> event
+                customization.hidden -> null
+                else -> event.withOverrides(
+                    overrides = customization.overrides,
+                    allowDateOverride = customization.target is CustomizationTarget.Occurrence,
+                )
+            }
+        }
+    }
+
+    private fun List<EventCustomization>.latestMatchFor(event: CalendarEvent): EventCustomization? =
+        asSequence()
+            .filter { customization ->
+                val target = customization.target as CustomizationTarget.SeriesFrom
+                target.source == event.source &&
+                    target.seriesId == event.seriesId &&
+                    !event.start.isBefore(target.fromStart)
+            }
+            .maxByOrNull { customization ->
+                (customization.target as CustomizationTarget.SeriesFrom).fromStart
+            }
+
+    private fun CalendarEvent.withOverrides(
+        overrides: EventFieldOverrides,
+        allowDateOverride: Boolean,
+    ): CalendarEvent {
+        val hasApplicableOverride =
+            overrides.title != null ||
+                (allowDateOverride && overrides.date != null) ||
+                (!isAllDay && (overrides.startTime != null || overrides.endTime != null)) ||
+                overrides.location != null ||
+                overrides.description != null
+        if (!hasApplicableOverride) return this
+
+        val overriddenDate = overrides.date.takeIf { allowDateOverride }
+        val newStart: LocalDateTime
+        val newEnd: LocalDateTime
+        if (isAllDay) {
+            val dayShift = overriddenDate?.let { newDate ->
+                Duration.between(start.toLocalDate().atStartOfDay(), newDate.atStartOfDay()).toDays()
+            } ?: 0L
+            newStart = start.plusDays(dayShift)
+            newEnd = end.plusDays(dayShift)
+        } else {
+            val startDate = overriddenDate ?: start.toLocalDate()
+            val endDayOffset = Duration.between(
+                start.toLocalDate().atStartOfDay(),
+                end.toLocalDate().atStartOfDay(),
+            ).toDays()
+            newStart = startDate.atTime(overrides.startTime ?: start.toLocalTime())
+            newEnd = startDate.plusDays(endDayOffset).atTime(overrides.endTime ?: end.toLocalTime())
+        }
+
+        return copy(
+            title = overrides.title ?: title,
+            start = newStart,
+            end = newEnd,
+            location = overrides.location ?: location,
+            description = overrides.description ?: description,
+            isCustomized = true,
+        )
     }
 
     /**
@@ -122,6 +223,7 @@ class DefaultCalendarMergeService(
     private companion object {
         const val GOOGLE_SOURCE = "Google calendars"
         const val ICS_SOURCE = "ICS work calendar"
+        const val CUSTOMIZATION_SOURCE = "Event customizations"
         val FREE_WINDOW_START: LocalTime = LocalTime.of(9, 0)
         val FREE_WINDOW_END: LocalTime = LocalTime.of(22, 0)
         val MINIMUM_SHARED_FREE_BLOCK: Duration = Duration.ofHours(3)

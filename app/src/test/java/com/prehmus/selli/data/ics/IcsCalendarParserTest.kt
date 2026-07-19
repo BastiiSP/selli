@@ -129,6 +129,8 @@ class IcsCalendarParserTest {
             ),
             events.map { it.id },
         )
+        assertEquals(5, events.map { it.id }.distinct().size)
+        assertEquals(setOf("weekly-1"), events.map { it.seriesId }.toSet())
     }
 
     @Test
@@ -206,6 +208,7 @@ class IcsCalendarParserTest {
         assertEquals(CalendarSource.WORK_ICS, event.source)
         assertEquals(Person.BASTI, event.owner)
         assertFalse(event.isSharedEvent)
+        assertEquals("metadata-1", event.seriesId)
     }
 
     private fun parse(ics: String): List<CalendarEvent> {

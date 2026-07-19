@@ -78,6 +78,19 @@ class GoogleCalendarEventMapperTest {
     }
 
     @Test
+    fun `maps recurring event id as series id`() {
+        val mapped = mapper.toCalendarEvent(
+            event = timedEvent().setRecurringEventId("series-1"),
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.BASTI,
+            ownEmail = "basti@example.test",
+            partnerEmail = "melli@example.test",
+        )
+
+        assertEquals("series-1", mapped.seriesId)
+    }
+
+    @Test
     fun `detects shared event when both people are attendees`() {
         val googleEvent = timedEvent()
             .setAttendees(
