@@ -43,4 +43,5 @@ data class NewCalendarEvent(
     val location: String? = null,
     val description: String? = null,
     val invitePartner: Boolean = false,
+    val recurrence: EventRecurrence? = null,
 )

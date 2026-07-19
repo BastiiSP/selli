@@ -58,6 +58,7 @@ class GoogleCalendarDataRepository(
 ) : GoogleCalendarRepository, CalendarRepository, SessionRepository {
     private val credentialManager = CredentialManager.create(context.applicationContext)
     private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
+    private val rruleFormatter = GoogleRruleFormatter(zoneId)
 
     override suspend fun signIn(): AuthResult {
         val activity = activity
@@ -278,6 +279,10 @@ class GoogleCalendarDataRepository(
                     ExtendedProperties()
                         .setShared(mapOf(GoogleCalendarEventMapper.SELLI_SHARED_PROPERTY to "true")),
                 )
+        }
+
+        recurrence?.let {
+            googleEvent.setRecurrence(listOf(rruleFormatter.format(it, isAllDay)))
         }
 
         return googleEvent
