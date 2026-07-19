@@ -94,6 +94,9 @@ dependencies {
     implementation(libs.google.api.client.android)
     implementation(libs.google.api.services.calendar)
     implementation(libs.google.http.client.gson)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
 
