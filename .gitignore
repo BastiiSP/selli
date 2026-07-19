@@ -16,6 +16,9 @@ secrets.properties
 # Rohausgabe der Bildgenerierung — erst manuell kuratierte Assets landen unter res/.
 /tools/generate-assets/output/
 
+# Private Referenzfotos für die Avatar-/Maskottchen-Generierung — nie committen.
+/tools/generate-assets/reference-photos/
+
 # Enthält den OpenAI-API-Key fürs Asset-Tool — niemals committen.
 /tools/generate-assets/.env
 # Editor-Sicherungsdateien (z. B. von nano) könnten Reste vertraulicher Werte enthalten.

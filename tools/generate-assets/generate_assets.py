@@ -66,15 +66,18 @@ ASSETS = {
         "A small round illustrated avatar portrait in the same hand-illustrated children's-book "
         "style as a warm original soot-sprite-inspired mascot character (not a copy of any "
         "copyrighted character) — a friendly, simplified, gender-neutral stylized human face "
-        "portrait (not photorealistic), with a soft green color accent (#4C9A6A) worked into "
-        "hair or clothing, centered, isolated, transparent background, no text."
+        "portrait (not photorealistic), flat-illustrated, with short cropped dark brown hair faded "
+        "at the sides, a short groomed dark brown beard and moustache along the jawline, blue-grey "
+        "eyes, and a soft green color accent (#4C9A6A) worked into hair or clothing, centered, "
+        "isolated, transparent background, no text."
     ),
     "avatar_melli": (
         "A small round illustrated avatar portrait in the same hand-illustrated children's-book "
         "style as a warm original soot-sprite-inspired mascot character (not a copy of any "
         "copyrighted character) — a friendly, simplified, gender-neutral stylized human face "
-        "portrait (not photorealistic), with a soft purple color accent (#8E6BBF) worked into "
-        "hair or clothing, centered, isolated, transparent background, no text."
+        "portrait (not photorealistic), flat-illustrated, with straight dark brown hair worn loose "
+        "or in a low ponytail, warm brown eyes, warm tan skin tone, and a soft purple color accent "
+        "(#8E6BBF) worked into hair or clothing, centered, isolated, transparent background, no text."
     ),
 }
 
