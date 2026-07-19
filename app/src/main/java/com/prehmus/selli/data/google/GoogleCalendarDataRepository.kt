@@ -21,6 +21,8 @@ import com.google.api.services.calendar.model.Event.ExtendedProperties
 import com.google.api.services.calendar.model.EventAttendee
 import com.google.api.services.calendar.model.EventDateTime
 import com.prehmus.selli.BuildConfig
+import com.prehmus.selli.domain.logging.CalendarLogger
+import com.prehmus.selli.domain.logging.NoOpCalendarLogger
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
@@ -50,8 +52,10 @@ class GoogleCalendarDataRepository(
         PREFS_NAME,
         Context.MODE_PRIVATE,
     ),
+    logger: CalendarLogger = NoOpCalendarLogger,
 ) : GoogleCalendarRepository, CalendarRepository {
     private val credentialManager = CredentialManager.create(context.applicationContext)
+    private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
 
     override suspend fun signIn(): AuthResult {
         val activity = activity
@@ -134,38 +138,41 @@ class GoogleCalendarDataRepository(
         val timeMax = range.endInclusive.plusDays(1).atStartOfDay().toGoogleDateTime()
 
         return withGoogleCalendarDispatcher(ioDispatcher) {
-            withGoogleApiAuthTranslation {
-                val service = calendar(ownAccount.email)
-                val ownEvents = service.fetchEvents(
-                    calendarId = PRIMARY_CALENDAR_ID,
-                    timeMin = timeMin,
-                    timeMax = timeMax,
-                ).map { event ->
-                    mapper.toCalendarEvent(
-                        event = event,
-                        source = CalendarSource.GOOGLE_OWN,
-                        owner = ownAccount.person,
-                        ownEmail = ownAccount.email,
-                        partnerEmail = partnerAccount.email,
-                    )
-                }
-
-                val partnerEvents = service.fetchEvents(
-                    calendarId = partnerAccount.email,
-                    timeMin = timeMin,
-                    timeMax = timeMax,
-                ).map { event ->
-                    mapper.toCalendarEvent(
-                        event = event,
-                        source = CalendarSource.GOOGLE_PARTNER,
-                        owner = partnerAccount.person,
-                        ownEmail = ownAccount.email,
-                        partnerEmail = partnerAccount.email,
-                    )
-                }
-
-                ownEvents + partnerEvents
-            }
+            val service = withGoogleApiAuthTranslation { calendar(ownAccount.email) }
+            eventFetcher.fetch(
+                fetchOwn = {
+                    withGoogleApiAuthTranslation {
+                        service.fetchEvents(
+                            calendarId = PRIMARY_CALENDAR_ID,
+                            timeMin = timeMin,
+                            timeMax = timeMax,
+                        ).map { event ->
+                            mapper.toCalendarEvent(
+                                event = event,
+                                source = CalendarSource.GOOGLE_OWN,
+                                owner = ownAccount.person,
+                                ownEmail = ownAccount.email,
+                                partnerEmail = partnerAccount.email,
+                            )
+                        }
+                    }
+                },
+                fetchPartner = {
+                    service.fetchEvents(
+                        calendarId = partnerAccount.email,
+                        timeMin = timeMin,
+                        timeMax = timeMax,
+                    ).map { event ->
+                        mapper.toCalendarEvent(
+                            event = event,
+                            source = CalendarSource.GOOGLE_PARTNER,
+                            owner = partnerAccount.person,
+                            ownEmail = ownAccount.email,
+                            partnerEmail = partnerAccount.email,
+                        )
+                    }
+                },
+            )
         }
     }
 

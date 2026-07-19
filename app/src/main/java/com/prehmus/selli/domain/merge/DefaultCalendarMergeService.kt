@@ -1,6 +1,8 @@
 package com.prehmus.selli.domain.merge
 
 import com.prehmus.selli.domain.CalendarMergeService
+import com.prehmus.selli.domain.logging.CalendarLogger
+import com.prehmus.selli.domain.logging.NoOpCalendarLogger
 import com.prehmus.selli.domain.model.CalendarAuthRequiredException
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
@@ -17,14 +19,15 @@ import kotlinx.coroutines.coroutineScope
 class DefaultCalendarMergeService(
     private val googleCalendarRepository: GoogleCalendarRepository,
     private val icsCalendarRepository: IcsCalendarRepository,
+    private val logger: CalendarLogger = NoOpCalendarLogger,
 ) : CalendarMergeService {
 
     override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = coroutineScope {
         val googleEvents = async {
-            fetchEventsOrEmpty { googleCalendarRepository.fetchEvents(range) }
+            fetchEventsOrEmpty(GOOGLE_SOURCE) { googleCalendarRepository.fetchEvents(range) }
         }
         val icsEvents = async {
-            fetchEventsOrEmpty { icsCalendarRepository.fetchEvents(range) }
+            fetchEventsOrEmpty(ICS_SOURCE) { icsCalendarRepository.fetchEvents(range) }
         }
 
         (googleEvents.await() + icsEvents.await())
@@ -97,6 +100,7 @@ class DefaultCalendarMergeService(
     }
 
     private suspend fun fetchEventsOrEmpty(
+        source: String,
         fetchEvents: suspend () -> List<CalendarEvent>,
     ): List<CalendarEvent> =
         try {
@@ -106,6 +110,7 @@ class DefaultCalendarMergeService(
         } catch (exception: CalendarAuthRequiredException) {
             throw exception
         } catch (exception: Exception) {
+            logger.error(source, exception)
             emptyList()
         }
 
@@ -115,6 +120,8 @@ class DefaultCalendarMergeService(
     )
 
     private companion object {
+        const val GOOGLE_SOURCE = "Google calendars"
+        const val ICS_SOURCE = "ICS work calendar"
         val FREE_WINDOW_START: LocalTime = LocalTime.of(9, 0)
         val FREE_WINDOW_END: LocalTime = LocalTime.of(22, 0)
         val MINIMUM_SHARED_FREE_BLOCK: Duration = Duration.ofHours(3)

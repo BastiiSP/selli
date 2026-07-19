@@ -1,5 +1,6 @@
 package com.prehmus.selli.domain.merge
 
+import com.prehmus.selli.domain.logging.CalendarLogger
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarAuthRequiredException
@@ -107,6 +108,23 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_logsFetchFailureWithSourceAndCause() = runTest {
+        val failure = IllegalStateException("Google unavailable")
+        val logger = FakeCalendarLogger()
+        val service = service(
+            googleFailure = failure,
+            logger = logger,
+        )
+
+        service.mergedEvents(testRange)
+
+        assertEquals(1, logger.errors.size)
+        assertEquals("Google calendars", logger.errors.single().source)
+        assertTrue(logger.errors.single().cause is IllegalStateException)
+        assertEquals("Google unavailable", logger.errors.single().cause.message)
+    }
+
+    @Test
     fun mergedEvents_returnsGoogleEventsWhenIcsFails() = runTest {
         val googleEvent = event(id = "google", source = CalendarSource.GOOGLE_OWN)
         val service = service(
@@ -122,7 +140,11 @@ class DefaultCalendarMergeServiceTest {
     @Test
     fun mergedEvents_rethrowsCalendarAuthRequiredException() = runTest {
         val authException = CalendarAuthRequiredException("Consent needed")
-        val service = service(googleFailure = authException)
+        val logger = FakeCalendarLogger()
+        val service = service(
+            googleFailure = authException,
+            logger = logger,
+        )
 
         val thrown = try {
             service.mergedEvents(testRange)
@@ -133,6 +155,7 @@ class DefaultCalendarMergeServiceTest {
 
         assertTrue(thrown is CalendarAuthRequiredException)
         assertEquals("Consent needed", thrown?.message)
+        assertTrue(logger.errors.isEmpty())
     }
 
     @Test
@@ -262,6 +285,7 @@ class DefaultCalendarMergeServiceTest {
         icsEvents: List<CalendarEvent> = emptyList(),
         googleFailure: Throwable? = null,
         icsFailure: Throwable? = null,
+        logger: CalendarLogger = FakeCalendarLogger(),
     ): DefaultCalendarMergeService =
         DefaultCalendarMergeService(
             googleCalendarRepository = FakeGoogleCalendarRepository(
@@ -272,7 +296,18 @@ class DefaultCalendarMergeServiceTest {
                 events = icsEvents,
                 failure = icsFailure,
             ),
+            logger = logger,
         )
+
+    private class FakeCalendarLogger : CalendarLogger {
+        val errors = mutableListOf<LoggedError>()
+
+        override fun error(source: String, cause: Throwable) {
+            errors += LoggedError(source, cause)
+        }
+
+        data class LoggedError(val source: String, val cause: Throwable)
+    }
 
     private fun event(
         id: String,
