@@ -32,12 +32,18 @@ import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 class GoogleCalendarDataRepository(
     context: Context,
     private val activity: Activity? = null,
     private val personResolver: (email: String) -> Person,
-    private val serviceFactory: GoogleCalendarServiceFactory = AndroidGoogleCalendarServiceFactory(context),
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    private val serviceFactory: GoogleCalendarServiceFactory = AndroidGoogleCalendarServiceFactory(
+        context = context,
+        ioDispatcher = ioDispatcher,
+    ),
     private val mapper: GoogleCalendarEventMapper = GoogleCalendarEventMapper(),
     private val zoneId: ZoneId = ZoneId.systemDefault(),
     private val preferences: SharedPreferences = context.applicationContext.getSharedPreferences(
@@ -98,25 +104,27 @@ class GoogleCalendarDataRepository(
      * so each primary calendar gets an ACL rule for the other person.
      */
     override suspend fun grantMutualAccess(ownAccount: Account, partnerAccount: Account): Result<Unit> =
-        runGoogleApiCatching {
-            val aclRule = AclRule()
-                .setRole("reader")
-                .setScope(
-                    AclRule.Scope()
-                        .setType("user")
-                        .setValue(partnerAccount.email),
-                )
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            runGoogleApiCatching {
+                val aclRule = AclRule()
+                    .setRole("reader")
+                    .setScope(
+                        AclRule.Scope()
+                            .setType("user")
+                            .setValue(partnerAccount.email),
+                    )
 
-            try {
-                calendar(ownAccount.email).acl().insert(PRIMARY_CALENDAR_ID, aclRule).execute()
-            } catch (error: GoogleJsonResponseException) {
-                if (error.statusCode != HTTP_CONFLICT) {
-                    throw error
+                try {
+                    calendar(ownAccount.email).acl().insert(PRIMARY_CALENDAR_ID, aclRule).execute()
+                } catch (error: GoogleJsonResponseException) {
+                    if (error.statusCode != HTTP_CONFLICT) {
+                        throw error
+                    }
                 }
-            }
 
-            persistAccount(OWN_PREFIX, ownAccount)
-            persistAccount(PARTNER_PREFIX, partnerAccount)
+                persistAccount(OWN_PREFIX, ownAccount)
+                persistAccount(PARTNER_PREFIX, partnerAccount)
+            }
         }
 
     override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> {
@@ -125,68 +133,72 @@ class GoogleCalendarDataRepository(
         val timeMin = range.start.atStartOfDay().toGoogleDateTime()
         val timeMax = range.endInclusive.plusDays(1).atStartOfDay().toGoogleDateTime()
 
-        return withGoogleApiAuthTranslation {
-            val service = calendar(ownAccount.email)
-            val ownEvents = service.fetchEvents(
-                calendarId = PRIMARY_CALENDAR_ID,
-                timeMin = timeMin,
-                timeMax = timeMax,
-            ).map { event ->
-                mapper.toCalendarEvent(
-                    event = event,
-                    source = CalendarSource.GOOGLE_OWN,
-                    owner = ownAccount.person,
-                    ownEmail = ownAccount.email,
-                    partnerEmail = partnerAccount.email,
-                )
-            }
+        return withGoogleCalendarDispatcher(ioDispatcher) {
+            withGoogleApiAuthTranslation {
+                val service = calendar(ownAccount.email)
+                val ownEvents = service.fetchEvents(
+                    calendarId = PRIMARY_CALENDAR_ID,
+                    timeMin = timeMin,
+                    timeMax = timeMax,
+                ).map { event ->
+                    mapper.toCalendarEvent(
+                        event = event,
+                        source = CalendarSource.GOOGLE_OWN,
+                        owner = ownAccount.person,
+                        ownEmail = ownAccount.email,
+                        partnerEmail = partnerAccount.email,
+                    )
+                }
 
-            val partnerEvents = service.fetchEvents(
-                calendarId = partnerAccount.email,
-                timeMin = timeMin,
-                timeMax = timeMax,
-            ).map { event ->
-                mapper.toCalendarEvent(
-                    event = event,
-                    source = CalendarSource.GOOGLE_PARTNER,
-                    owner = partnerAccount.person,
-                    ownEmail = ownAccount.email,
-                    partnerEmail = partnerAccount.email,
-                )
-            }
+                val partnerEvents = service.fetchEvents(
+                    calendarId = partnerAccount.email,
+                    timeMin = timeMin,
+                    timeMax = timeMax,
+                ).map { event ->
+                    mapper.toCalendarEvent(
+                        event = event,
+                        source = CalendarSource.GOOGLE_PARTNER,
+                        owner = partnerAccount.person,
+                        ownEmail = ownAccount.email,
+                        partnerEmail = partnerAccount.email,
+                    )
+                }
 
-            ownEvents + partnerEvents
+                ownEvents + partnerEvents
+            }
         }
     }
 
     override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> =
-        runGoogleApiCatching {
-            val ownAccount = requireStoredAccount(OWN_PREFIX)
-            val partnerAccount = storedAccount(PARTNER_PREFIX)
-            val inserted = calendar(ownAccount.email)
-                .events()
-                .insert(PRIMARY_CALENDAR_ID, event.toGoogleEvent(partnerAccount?.email))
-                .execute()
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            runGoogleApiCatching {
+                val ownAccount = requireStoredAccount(OWN_PREFIX)
+                val partnerAccount = storedAccount(PARTNER_PREFIX)
+                val inserted = calendar(ownAccount.email)
+                    .events()
+                    .insert(PRIMARY_CALENDAR_ID, event.toGoogleEvent(partnerAccount?.email))
+                    .execute()
 
-            mapper.toCalendarEvent(
-                event = inserted,
-                source = CalendarSource.GOOGLE_OWN,
-                owner = ownAccount.person,
-                ownEmail = ownAccount.email,
-                partnerEmail = partnerAccount?.email,
-            )
+                mapper.toCalendarEvent(
+                    event = inserted,
+                    source = CalendarSource.GOOGLE_OWN,
+                    owner = ownAccount.person,
+                    ownEmail = ownAccount.email,
+                    partnerEmail = partnerAccount?.email,
+                )
+            }
         }
 
-    private fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
+    private suspend fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
 
-    private fun <T> runGoogleApiCatching(block: () -> T): Result<T> =
+    private suspend fun <T> runGoogleApiCatching(block: suspend () -> T): Result<T> =
         try {
             Result.success(withGoogleApiAuthTranslation(block))
         } catch (error: Throwable) {
             Result.failure(error)
         }
 
-    private fun <T> withGoogleApiAuthTranslation(block: () -> T): T =
+    private suspend fun <T> withGoogleApiAuthTranslation(block: suspend () -> T): T =
         try {
             block()
         } catch (error: UserRecoverableAuthIOException) {

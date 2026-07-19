@@ -7,9 +7,11 @@ import com.google.api.client.http.javanet.NetHttpTransport
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.calendar.Calendar
 import com.google.api.services.calendar.CalendarScopes
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 
 interface GoogleCalendarServiceFactory {
-    fun create(accountEmail: String): Calendar
+    suspend fun create(accountEmail: String): Calendar
 }
 
 internal data class GoogleCalendarAccount(
@@ -45,27 +47,29 @@ private class AndroidGoogleCalendarCredential(
 class AndroidGoogleCalendarServiceFactory(
     context: Context,
     private val applicationName: String = "Selli",
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : GoogleCalendarServiceFactory {
     private val applicationContext = context.applicationContext
 
-    override fun create(accountEmail: String): Calendar {
-        val credential = GoogleAccountCredential.usingOAuth2(
-            applicationContext,
-            listOf(CalendarScopes.CALENDAR),
-        )
-        GoogleCalendarAccountSelector.select(
-            credential = AndroidGoogleCalendarCredential(credential),
-            accountEmail = accountEmail,
-        )
+    override suspend fun create(accountEmail: String): Calendar =
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            val credential = GoogleAccountCredential.usingOAuth2(
+                applicationContext,
+                listOf(CalendarScopes.CALENDAR),
+            )
+            GoogleCalendarAccountSelector.select(
+                credential = AndroidGoogleCalendarCredential(credential),
+                accountEmail = accountEmail,
+            )
 
-        return Calendar.Builder(
-            NetHttpTransport(),
-            GsonFactory.getDefaultInstance(),
-            credential,
-        )
-            .setApplicationName(applicationName)
-            .build()
-    }
+            Calendar.Builder(
+                NetHttpTransport(),
+                GsonFactory.getDefaultInstance(),
+                credential,
+            )
+                .setApplicationName(applicationName)
+                .build()
+        }
 }
 
 private const val GOOGLE_ACCOUNT_TYPE = "com.google"
