@@ -2,6 +2,7 @@ package com.prehmus.selli.domain.merge
 
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
+import com.prehmus.selli.domain.model.CalendarAuthRequiredException
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.DateRange
@@ -119,7 +120,23 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun isBothFree_returnsTrueWhenNoEventsTouchDay() = runTest {
+    fun mergedEvents_rethrowsCalendarAuthRequiredException() = runTest {
+        val authException = CalendarAuthRequiredException("Consent needed")
+        val service = service(googleFailure = authException)
+
+        val thrown = try {
+            service.mergedEvents(testRange)
+            null
+        } catch (error: CalendarAuthRequiredException) {
+            error
+        }
+
+        assertTrue(thrown is CalendarAuthRequiredException)
+        assertEquals("Consent needed", thrown?.message)
+    }
+
+    @Test
+    fun isBothFree_returnsTrueWhenDayIsEmpty() = runTest {
         val service = service()
 
         val result = service.isBothFree(testDay)
@@ -128,26 +145,40 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun isBothFree_returnsFalseWhenOnlyBastiHasEvent() = runTest {
+    fun isBothFree_returnsTrueWhenEveningEventLeavesThreeHoursDuringDay() = runTest {
         val service = service(
             googleEvents = listOf(
-                event(id = "basti", owner = Person.BASTI),
+                event(
+                    id = "evening",
+                    start = dateTime(hour = 19),
+                    end = dateTime(hour = 21),
+                ),
             ),
         )
 
         val result = service.isBothFree(testDay)
 
-        assertFalse(result)
+        assertTrue(result)
     }
 
     @Test
-    fun isBothFree_returnsFalseWhenOnlyMelliHasEvent() = runTest {
+    fun isBothFree_returnsFalseWhenOnlyGapsShorterThanThreeHoursRemain() = runTest {
         val service = service(
             googleEvents = listOf(
                 event(
-                    id = "melli",
-                    source = CalendarSource.GOOGLE_PARTNER,
-                    owner = Person.MELLI,
+                    id = "morning",
+                    start = dateTime(hour = 9),
+                    end = testDay.atTime(11, 0),
+                ),
+                event(
+                    id = "afternoon",
+                    start = testDay.atTime(13, 30),
+                    end = testDay.atTime(16, 0),
+                ),
+                event(
+                    id = "evening",
+                    start = testDay.atTime(18, 30),
+                    end = dateTime(hour = 22),
                 ),
             ),
         )
@@ -158,11 +189,28 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun isBothFree_countsWorkIcsAsBastiEvent() = runTest {
+    fun isBothFree_mergesOverlappingEventsFromBothPeople() = runTest {
         val service = service(
+            googleEvents = listOf(
+                event(
+                    id = "basti",
+                    start = dateTime(hour = 9),
+                    end = dateTime(hour = 13),
+                    owner = Person.BASTI,
+                ),
+                event(
+                    id = "melli",
+                    start = dateTime(hour = 12),
+                    end = dateTime(hour = 19),
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    owner = Person.MELLI,
+                ),
+            ),
             icsEvents = listOf(
                 event(
                     id = "work",
+                    start = dateTime(hour = 19),
+                    end = dateTime(hour = 20),
                     source = CalendarSource.WORK_ICS,
                     owner = Person.BASTI,
                 ),
@@ -175,7 +223,7 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun isBothFree_countsAllDayEventOnTouchedDay() = runTest {
+    fun isBothFree_returnsTrueWhenOnlyAllDayEventExists() = runTest {
         val service = service(
             googleEvents = listOf(
                 event(
@@ -189,35 +237,17 @@ class DefaultCalendarMergeServiceTest {
 
         val result = service.isBothFree(testDay)
 
-        assertFalse(result)
+        assertTrue(result)
     }
 
     @Test
-    fun isBothFree_countsMultiDayEventOnEveryTouchedDay() = runTest {
+    fun isBothFree_returnsTrueWhenEventIsCompletelyOutsideFreeWindow() = runTest {
         val service = service(
             googleEvents = listOf(
                 event(
-                    id = "multi-day",
-                    start = testDay.minusDays(1).atTime(22, 0),
-                    end = testDay.plusDays(1).atTime(8, 0),
-                ),
-            ),
-        )
-
-        val result = service.isBothFree(testDay)
-
-        assertFalse(result)
-    }
-
-    @Test
-    fun isBothFree_doesNotCountExclusiveAllDayEndOnFollowingDay() = runTest {
-        val service = service(
-            googleEvents = listOf(
-                event(
-                    id = "all-day-before",
-                    start = testDay.minusDays(1).atStartOfDay(),
-                    end = testDay.atStartOfDay(),
-                    isAllDay = true,
+                    id = "late",
+                    start = dateTime(hour = 23),
+                    end = testDay.plusDays(1).atTime(1, 0),
                 ),
             ),
         )

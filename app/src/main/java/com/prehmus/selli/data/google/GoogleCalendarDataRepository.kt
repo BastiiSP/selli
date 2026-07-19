@@ -11,6 +11,7 @@ import androidx.credentials.exceptions.GetCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
+import com.google.api.client.googleapis.extensions.android.gms.auth.UserRecoverableAuthIOException
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.util.DateTime
 import com.google.api.services.calendar.Calendar
@@ -34,7 +35,7 @@ import java.time.ZoneId
 
 class GoogleCalendarDataRepository(
     context: Context,
-    private val activity: Activity,
+    private val activity: Activity? = null,
     private val personResolver: (email: String) -> Person,
     private val serviceFactory: GoogleCalendarServiceFactory = AndroidGoogleCalendarServiceFactory(context),
     private val mapper: GoogleCalendarEventMapper = GoogleCalendarEventMapper(),
@@ -47,6 +48,8 @@ class GoogleCalendarDataRepository(
     private val credentialManager = CredentialManager.create(context.applicationContext)
 
     override suspend fun signIn(): AuthResult {
+        val activity = activity
+            ?: return AuthResult.Error("Google-Anmeldung braucht eine Activity und ist hier nicht verfügbar.")
         val request = GetCredentialRequest.Builder()
             .addCredentialOption(
                 GetGoogleIdOption.Builder()
@@ -95,7 +98,7 @@ class GoogleCalendarDataRepository(
      * so each primary calendar gets an ACL rule for the other person.
      */
     override suspend fun grantMutualAccess(ownAccount: Account, partnerAccount: Account): Result<Unit> =
-        runCatching {
+        runGoogleApiCatching {
             val aclRule = AclRule()
                 .setRole("reader")
                 .setScope(
@@ -119,43 +122,45 @@ class GoogleCalendarDataRepository(
     override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> {
         val ownAccount = requireStoredAccount(OWN_PREFIX)
         val partnerAccount = requireStoredAccount(PARTNER_PREFIX)
-        val service = calendar(ownAccount.email)
         val timeMin = range.start.atStartOfDay().toGoogleDateTime()
         val timeMax = range.endInclusive.plusDays(1).atStartOfDay().toGoogleDateTime()
 
-        val ownEvents = service.fetchEvents(
-            calendarId = PRIMARY_CALENDAR_ID,
-            timeMin = timeMin,
-            timeMax = timeMax,
-        ).map { event ->
-            mapper.toCalendarEvent(
-                event = event,
-                source = CalendarSource.GOOGLE_OWN,
-                owner = ownAccount.person,
-                ownEmail = ownAccount.email,
-                partnerEmail = partnerAccount.email,
-            )
-        }
+        return withGoogleApiAuthTranslation {
+            val service = calendar(ownAccount.email)
+            val ownEvents = service.fetchEvents(
+                calendarId = PRIMARY_CALENDAR_ID,
+                timeMin = timeMin,
+                timeMax = timeMax,
+            ).map { event ->
+                mapper.toCalendarEvent(
+                    event = event,
+                    source = CalendarSource.GOOGLE_OWN,
+                    owner = ownAccount.person,
+                    ownEmail = ownAccount.email,
+                    partnerEmail = partnerAccount.email,
+                )
+            }
 
-        val partnerEvents = service.fetchEvents(
-            calendarId = partnerAccount.email,
-            timeMin = timeMin,
-            timeMax = timeMax,
-        ).map { event ->
-            mapper.toCalendarEvent(
-                event = event,
-                source = CalendarSource.GOOGLE_PARTNER,
-                owner = partnerAccount.person,
-                ownEmail = ownAccount.email,
-                partnerEmail = partnerAccount.email,
-            )
-        }
+            val partnerEvents = service.fetchEvents(
+                calendarId = partnerAccount.email,
+                timeMin = timeMin,
+                timeMax = timeMax,
+            ).map { event ->
+                mapper.toCalendarEvent(
+                    event = event,
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    owner = partnerAccount.person,
+                    ownEmail = ownAccount.email,
+                    partnerEmail = partnerAccount.email,
+                )
+            }
 
-        return ownEvents + partnerEvents
+            ownEvents + partnerEvents
+        }
     }
 
     override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> =
-        runCatching {
+        runGoogleApiCatching {
             val ownAccount = requireStoredAccount(OWN_PREFIX)
             val partnerAccount = storedAccount(PARTNER_PREFIX)
             val inserted = calendar(ownAccount.email)
@@ -173,6 +178,29 @@ class GoogleCalendarDataRepository(
         }
 
     private fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
+
+    private fun <T> runGoogleApiCatching(block: () -> T): Result<T> =
+        try {
+            Result.success(withGoogleApiAuthTranslation(block))
+        } catch (error: Throwable) {
+            Result.failure(error)
+        }
+
+    private fun <T> withGoogleApiAuthTranslation(block: () -> T): T =
+        try {
+            block()
+        } catch (error: UserRecoverableAuthIOException) {
+            throw error.toCalendarAuthRequiredException()
+        }
+
+    private fun UserRecoverableAuthIOException.toCalendarAuthRequiredException(): GoogleRecoverableAuthException {
+        val recoveryIntent = getIntent() ?: throw this
+        return GoogleRecoverableAuthException(
+            recoveryIntent = recoveryIntent,
+            message = RECOVERABLE_AUTH_MESSAGE,
+            cause = this,
+        )
+    }
 
     private fun Calendar.fetchEvents(
         calendarId: String,
@@ -272,5 +300,7 @@ class GoogleCalendarDataRepository(
         const val EMAIL_SUFFIX = "email"
         const val DISPLAY_NAME_SUFFIX = "display_name"
         const val PERSON_SUFFIX = "person"
+        const val RECOVERABLE_AUTH_MESSAGE =
+            "Google braucht einmalig deine Zustimmung für den Kalenderzugriff."
     }
 }
