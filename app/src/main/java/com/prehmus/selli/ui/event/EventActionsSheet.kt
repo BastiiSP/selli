@@ -138,7 +138,7 @@ fun EventActionsSheet(
                 )
             },
             confirmButton = {
-                Column(horizontalAlignment = Alignment.End) {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     TextButton(onClick = {
                         pendingScopeAction = null
                         execute(false)
@@ -147,10 +147,11 @@ fun EventActionsSheet(
                         pendingScopeAction = null
                         execute(true)
                     }) { Text("Dieses und alle folgenden") }
+                    TextButton(
+                        onClick = { pendingScopeAction = null },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Abbrechen") }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingScopeAction = null }) { Text("Abbrechen") }
             },
         )
     }
