@@ -31,6 +31,7 @@ class DefaultCalendarMergeService(
     private val customizationRepository: EventCustomizationRepository =
         NoOpEventCustomizationRepository,
     private val logger: CalendarLogger = NoOpCalendarLogger,
+    private val melliIcsCalendarRepository: IcsCalendarRepository? = null,
 ) : CalendarMergeService {
 
     override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = coroutineScope {
@@ -38,11 +39,16 @@ class DefaultCalendarMergeService(
             fetchEventsOrEmpty(GOOGLE_SOURCE) { googleCalendarRepository.fetchEvents(range) }
         }
         val icsEvents = async {
-            fetchEventsOrEmpty(ICS_SOURCE) { icsCalendarRepository.fetchEvents(range) }
+            fetchEventsOrEmpty(BASTI_ICS_SOURCE) { icsCalendarRepository.fetchEvents(range) }
+        }
+        val melliIcsEvents = melliIcsCalendarRepository?.let { repository ->
+            async {
+                fetchEventsOrEmpty(MELLI_ICS_SOURCE) { repository.fetchEvents(range) }
+            }
         }
 
-        val merged = (googleEvents.await() + icsEvents.await())
-            .distinctBy { event -> event.id to event.source }
+        val merged = (googleEvents.await() + icsEvents.await() + melliIcsEvents?.await().orEmpty())
+            .distinctBy { event -> Triple(event.id, event.source, event.owner) }
 
         applyCustomizationsOrOriginal(merged)
             .sortedWith(
@@ -248,7 +254,8 @@ class DefaultCalendarMergeService(
 
     private companion object {
         const val GOOGLE_SOURCE = "Google calendars"
-        const val ICS_SOURCE = "ICS work calendar"
+        const val BASTI_ICS_SOURCE = "Basti ICS work calendar"
+        const val MELLI_ICS_SOURCE = "Melli ICS work calendar"
         const val CUSTOMIZATION_SOURCE = "Event customizations"
         val FREE_WINDOW_START: LocalTime = LocalTime.of(9, 0)
         val FREE_WINDOW_END: LocalTime = LocalTime.of(22, 0)

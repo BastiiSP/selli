@@ -211,6 +211,30 @@ class IcsCalendarParserTest {
         assertEquals("metadata-1", event.seriesId)
     }
 
+    @Test
+    fun `maps configured owner while keeping work source`() {
+        val event = IcsCalendarParser(
+            systemZone = ZoneId.of("Europe/Berlin"),
+            owner = Person.MELLI,
+        ).parse(
+            """
+            BEGIN:VCALENDAR
+            BEGIN:VEVENT
+            UID:melli-work-1
+            DTSTART:20260110T090000
+            DTEND:20260110T100000
+            SUMMARY:Work
+            END:VEVENT
+            END:VCALENDAR
+            """.trimIndent(),
+            range,
+        ).single()
+
+        assertEquals(Person.MELLI, event.owner)
+        assertEquals(CalendarSource.WORK_ICS, event.source)
+        assertFalse(event.isSharedEvent)
+    }
+
     private fun parse(ics: String): List<CalendarEvent> {
         return IcsCalendarParser(systemZone = ZoneId.of("Europe/Berlin")).parse(ics, range)
     }

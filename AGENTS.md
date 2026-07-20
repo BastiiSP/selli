@@ -32,7 +32,9 @@ Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und 
 
 ## Build & Test
 
-*(Wird ergänzt, sobald das Android-Studio-Grundgerüst steht – konkrete Gradle-Befehle für Build/Test/Lint.)*
+- `./gradlew assembleDebug` – Debug-Build
+- `./gradlew testDebugUnitTest` – Unit-Tests
+- **Nach jeder abgeschlossenen Aufgabe** (Build + Tests grün): Ergebnis von `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Projekt-Root kopieren (`cp app/build/outputs/apk/debug/app-debug.apk selli.apk`) und die alte Version dabei überschreiben. Das ist der feste, einzige Ablageort für die Weitergabe an Basti/Melli (z. B. per WhatsApp) – kein Desktop, keine weiteren Kopien an anderer Stelle. `selli.apk` ist über `.gitignore` (`*.apk`) ausgeschlossen, landet also nie im Repo.
 
 ## Design-Referenz
 

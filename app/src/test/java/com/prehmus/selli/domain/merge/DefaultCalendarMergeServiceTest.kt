@@ -56,6 +56,34 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_mergesBothWorkFeedsAndAppliesWorkCategory() = runTest {
+        val bastiWorkEvent = event(
+            id = "same-work-id",
+            source = CalendarSource.WORK_ICS,
+            owner = Person.BASTI,
+        )
+        val melliWorkEvent = event(
+            id = "same-work-id",
+            source = CalendarSource.WORK_ICS,
+            owner = Person.MELLI,
+        )
+        val service = service(
+            icsEvents = listOf(bastiWorkEvent),
+            melliIcsEvents = listOf(melliWorkEvent),
+        )
+
+        val result = service.mergedEvents(testRange)
+
+        assertEquals(
+            listOf(
+                bastiWorkEvent.copy(category = EventCategory.WORK),
+                melliWorkEvent.copy(category = EventCategory.WORK),
+            ),
+            result,
+        )
+    }
+
+    @Test
     fun mergedEvents_sortsAllDayEventsBeforeTimedEventsThenByStart() = runTest {
         val timedEarly = event(
             id = "timed-early",
@@ -154,6 +182,52 @@ class DefaultCalendarMergeServiceTest {
         val result = service.mergedEvents(testRange)
 
         assertEquals(listOf(googleEvent), result)
+    }
+
+    @Test
+    fun mergedEvents_returnsGoogleAndBastiIcsEventsWhenMelliIcsFails() = runTest {
+        val googleEvent = event(id = "google", source = CalendarSource.GOOGLE_OWN)
+        val bastiWorkEvent = event(id = "basti-work", source = CalendarSource.WORK_ICS)
+        val logger = FakeCalendarLogger()
+        val service = service(
+            googleEvents = listOf(googleEvent),
+            icsEvents = listOf(bastiWorkEvent),
+            melliIcsFailure = IllegalStateException("Melli ICS unavailable"),
+            logger = logger,
+        )
+
+        val result = service.mergedEvents(testRange)
+
+        assertEquals(
+            listOf(googleEvent, bastiWorkEvent.copy(category = EventCategory.WORK)),
+            result,
+        )
+        assertEquals("Melli ICS work calendar", logger.errors.single().source)
+    }
+
+    @Test
+    fun mergedEvents_returnsGoogleAndMelliIcsEventsWhenBastiIcsFails() = runTest {
+        val googleEvent = event(id = "google", source = CalendarSource.GOOGLE_OWN)
+        val melliWorkEvent = event(
+            id = "melli-work",
+            source = CalendarSource.WORK_ICS,
+            owner = Person.MELLI,
+        )
+        val logger = FakeCalendarLogger()
+        val service = service(
+            googleEvents = listOf(googleEvent),
+            icsFailure = IllegalStateException("Basti ICS unavailable"),
+            melliIcsEvents = listOf(melliWorkEvent),
+            logger = logger,
+        )
+
+        val result = service.mergedEvents(testRange)
+
+        assertEquals(
+            listOf(googleEvent, melliWorkEvent.copy(category = EventCategory.WORK)),
+            result,
+        )
+        assertEquals("Basti ICS work calendar", logger.errors.single().source)
     }
 
     @Test
@@ -686,8 +760,10 @@ class DefaultCalendarMergeServiceTest {
     private fun service(
         googleEvents: List<CalendarEvent> = emptyList(),
         icsEvents: List<CalendarEvent> = emptyList(),
+        melliIcsEvents: List<CalendarEvent> = emptyList(),
         googleFailure: Throwable? = null,
         icsFailure: Throwable? = null,
+        melliIcsFailure: Throwable? = null,
         customizations: List<EventCustomization> = emptyList(),
         customizationFailure: Throwable? = null,
         logger: CalendarLogger = FakeCalendarLogger(),
@@ -706,6 +782,10 @@ class DefaultCalendarMergeServiceTest {
                 failure = customizationFailure,
             ),
             logger = logger,
+            melliIcsCalendarRepository = FakeIcsCalendarRepository(
+                events = melliIcsEvents,
+                failure = melliIcsFailure,
+            ),
         )
 
     private fun customization(

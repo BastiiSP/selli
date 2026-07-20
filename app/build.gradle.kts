@@ -41,6 +41,11 @@ android {
             "ICS_FEED_URL",
             buildConfigStringProperty("selli.icsFeedUrl"),
         )
+        buildConfigField(
+            "String",
+            "MELLI_ICS_FEED_URL",
+            buildConfigStringProperty("selli.melliIcsFeedUrl"),
+        )
     }
 
     buildTypes {

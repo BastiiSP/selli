@@ -22,6 +22,7 @@ import java.util.Locale
  */
 class IcsCalendarParser(
     private val systemZone: ZoneId = ZoneId.systemDefault(),
+    private val owner: Person = Person.BASTI,
 ) {
     fun parse(ics: String, range: DateRange): List<CalendarEvent> {
         return parseVEvents(ics)
@@ -120,6 +121,7 @@ class IcsCalendarParser(
                 id = if (rrule == null) uid else "$uid-${occurrenceStart.format(occurrenceIdFormatter)}",
                 start = occurrenceStart,
                 end = occurrenceEnd,
+                owner = owner,
             )
         }
     }
@@ -315,7 +317,12 @@ class IcsCalendarParser(
         val location: String?,
         val description: String?,
     ) {
-        fun toCalendarEvent(id: String, start: LocalDateTime, end: LocalDateTime): CalendarEvent {
+        fun toCalendarEvent(
+            id: String,
+            start: LocalDateTime,
+            end: LocalDateTime,
+            owner: Person,
+        ): CalendarEvent {
             return CalendarEvent(
                 id = id,
                 title = title,
@@ -323,7 +330,7 @@ class IcsCalendarParser(
                 end = end,
                 isAllDay = isAllDay,
                 source = CalendarSource.WORK_ICS,
-                owner = Person.BASTI,
+                owner = owner,
                 isSharedEvent = false,
                 location = location,
                 description = description,

@@ -3,6 +3,7 @@ package com.prehmus.selli
 import androidx.activity.ComponentActivity
 import com.prehmus.selli.data.customization.FileEventCustomizationRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
+import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.domain.CalendarMergeService
@@ -40,6 +41,12 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
 
     override val icsCalendarRepository: IcsCalendarRepository = OkHttpIcsCalendarRepository()
 
+    private val melliIcsCalendarRepository: IcsCalendarRepository =
+        OkHttpIcsCalendarRepository(
+            feedUrl = BuildConfig.MELLI_ICS_FEED_URL,
+            parser = IcsCalendarParser(owner = Person.MELLI),
+        )
+
     // Lokale Ausblendungen/Anpassungen: liegen nur auf dem Gerät und werden im
     // Merge über die frischen Rohdaten gelegt — der Google-Kalender bleibt unberührt.
     override val eventCustomizationRepository: EventCustomizationRepository =
@@ -51,6 +58,7 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
             icsCalendarRepository = icsCalendarRepository,
             customizationRepository = eventCustomizationRepository,
             logger = AndroidCalendarLogger,
+            melliIcsCalendarRepository = melliIcsCalendarRepository,
         )
 
     override val calendarRepository: CalendarRepository = googleRepository
