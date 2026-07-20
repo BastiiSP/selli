@@ -9,12 +9,14 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
@@ -26,6 +28,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.ui.settings.rememberLayoutPreferences
 import com.prehmus.selli.ui.event.CreateEventSheet
 import com.prehmus.selli.ui.event.CustomizationManagerSheet
@@ -155,6 +159,16 @@ fun CalendarScreen(
                 onSelect = selectViewMode,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
+
+            // Fehlgeschlagene Kalenderquellen sichtbar machen (früher still leer): so fällt
+            // ein zeitweise fehlender Kalender – z. B. Mellis Dr.-Plano-Feed – sofort auf.
+            if (uiState.loadErrors.isNotEmpty()) {
+                SourceLoadErrorBanner(
+                    errors = uiState.loadErrors,
+                    onRetry = viewModel::refresh,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                )
+            }
 
             // Austauschbarer mittlerer Baustein samt Detailliste. Wischen (und die
             // Pfeile oben) blättern innerhalb der aktiven Ansicht (Monat/Woche/Tag) und
@@ -347,6 +361,51 @@ private fun CalendarListResizeHandle(
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.outlineVariant),
         )
+    }
+}
+
+/**
+ * Sanfter Warnhinweis, wenn beim letzten Laden einzelne Kalenderquellen scheiterten.
+ * Zuvor verschwanden solche Quellen kommentarlos (leere Liste) — dadurch fiel etwa
+ * Mellis zeitweise fehlender Dr.-Plano-Kalender gar nicht auf. „Erneut" lädt sofort neu.
+ */
+@Composable
+private fun SourceLoadErrorBanner(
+    errors: List<SourceLoadError>,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val names = errors.joinToString(", ") { it.displayName }
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = if (errors.size == 1) {
+                        "$names konnte nicht geladen werden"
+                    } else {
+                        "Einige Kalender konnten nicht geladen werden"
+                    },
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    text = if (errors.size == 1) {
+                        "Zieh zum Aktualisieren oder tippe „Erneut“."
+                    } else {
+                        "$names — zieh zum Aktualisieren oder tippe „Erneut“."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            TextButton(onClick = onRetry) { Text("Erneut") }
+        }
     }
 }
 

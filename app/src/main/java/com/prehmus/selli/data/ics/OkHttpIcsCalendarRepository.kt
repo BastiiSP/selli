@@ -27,27 +27,34 @@ class OkHttpIcsCalendarRepository(
                 .get()
                 .build()
 
-            var attempt = 1
-            while (true) {
-                try {
-                    return@withContext client.newCall(request).execute().use { response ->
-                        if (!response.isSuccessful) {
-                            throw IcsHttpException(response.code)
-                        }
+            fetchWithRetry(request, range)
+        }
 
-                        val body = response.body?.string()
-                            ?: throw IOException("Failed to fetch ICS feed: empty response body")
-                        parser.parse(body, range)
+    private suspend fun fetchWithRetry(
+        request: Request,
+        range: DateRange,
+    ): List<CalendarEvent> {
+        var attempt = 1
+        while (true) {
+            try {
+                return client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        throw IcsHttpException(response.code)
                     }
-                } catch (exception: IOException) {
-                    if (attempt >= MAX_ATTEMPTS || !exception.isTransient()) {
-                        throw exception
-                    }
-                    retryBackoff(attempt)
-                    attempt += 1
+
+                    val body = response.body?.string()
+                        ?: throw IOException("Failed to fetch ICS feed: empty response body")
+                    parser.parse(body, range)
                 }
+            } catch (exception: IOException) {
+                if (attempt >= MAX_ATTEMPTS || !exception.isTransient()) {
+                    throw exception
+                }
+                retryBackoff(attempt)
+                attempt += 1
             }
         }
+    }
 
     private fun IOException.isTransient(): Boolean =
         this !is IcsHttpException || code == 429 || code in 500..599

@@ -14,6 +14,7 @@ import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
+import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import java.time.LocalDate
@@ -35,6 +36,8 @@ data class CalendarUiState(
     val viewMode: CalendarViewMode = CalendarViewMode.MONTH,
     val eventsByDay: Map<LocalDate, List<CalendarEvent>> = emptyMap(),
     val isSyncing: Boolean = false,
+    /** Kalenderquellen, die beim letzten Laden fehlgeschlagen sind — sichtbar statt still leer. */
+    val loadErrors: List<SourceLoadError> = emptyList(),
     /** Alle qualifizierenden gemeinsamen freien Blöcke am ausgewählten Tag (≥3h, 9–22 Uhr). */
     val freeBlocksOnSelectedDay: List<FreeTimeBlock> = emptyList(),
     val isCreateSheetOpen: Boolean = false,
@@ -114,8 +117,14 @@ class CalendarViewModel(
                     visibleMonth = month,
                     anchorDay = _uiState.value.selectedDay,
                 )
-                val events = mergeService.mergedEvents(range)
-                _uiState.update { it.copy(isSyncing = false, eventsByDay = events.groupByDay()) }
+                val merged = mergeService.mergedEventsWithStatus(range)
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        eventsByDay = merged.events.groupByDay(),
+                        loadErrors = merged.errors,
+                    )
+                }
                 refreshFreeBlocks(_uiState.value.selectedDay)
             } catch (cancellation: CancellationException) {
                 // Ein neuerer Refresh hat übernommen — dessen Lauf besitzt jetzt isSyncing.
