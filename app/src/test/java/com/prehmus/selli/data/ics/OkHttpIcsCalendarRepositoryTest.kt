@@ -14,6 +14,67 @@ import org.junit.Test
 
 class OkHttpIcsCalendarRepositoryTest {
     @Test
+    fun `fetchEvents reuses downloaded feed within TTL across different ranges`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyCalendar))
+        server.start()
+        try {
+            var currentTime = 1_000L
+            val repository = repository(server = server, now = { currentTime })
+
+            repository.fetchEvents(testRange)
+            repository.fetchEvents(
+                DateRange(
+                    start = LocalDate.of(2026, 2, 1),
+                    endInclusive = LocalDate.of(2026, 2, 28),
+                ),
+            )
+
+            assertEquals(1, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `fetchEvents force refresh downloads feed again within TTL`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyCalendar))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyCalendar))
+        server.start()
+        try {
+            val repository = repository(server = server)
+
+            repository.fetchEvents(testRange)
+            repository.fetchEvents(testRange, forceRefresh = true)
+
+            assertEquals(2, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
+    fun `fetchEvents downloads feed again after TTL`() = runTest {
+        val server = MockWebServer()
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyCalendar))
+        server.enqueue(MockResponse().setResponseCode(200).setBody(emptyCalendar))
+        server.start()
+        try {
+            var currentTime = 1_000L
+            val repository = repository(server = server, now = { currentTime })
+
+            repository.fetchEvents(testRange)
+            currentTime += 15 * 60 * 1_000L
+            repository.fetchEvents(testRange)
+
+            assertEquals(2, server.requestCount)
+        } finally {
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun `fetchEvents downloads feed and returns parsed events`() = runTest {
         val server = MockWebServer()
         server.enqueue(
@@ -131,12 +192,14 @@ class OkHttpIcsCalendarRepositoryTest {
 
     private fun repository(
         server: MockWebServer,
-        retryBackoff: suspend (attempt: Int) -> Unit,
+        retryBackoff: suspend (attempt: Int) -> Unit = {},
+        now: () -> Long = { 1_000L },
     ): OkHttpIcsCalendarRepository = OkHttpIcsCalendarRepository(
         feedUrl = server.url("/calendar.ics").toString(),
         client = OkHttpClient(),
         parser = IcsCalendarParser(systemZone = ZoneId.of("Europe/Berlin")),
         retryBackoff = retryBackoff,
+        now = now,
     )
 
     private companion object {

@@ -8,6 +8,8 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -17,23 +19,37 @@ class OkHttpIcsCalendarRepository(
     private val client: OkHttpClient = defaultIcsHttpClient(),
     private val parser: IcsCalendarParser = IcsCalendarParser(),
     private val retryBackoff: suspend (attempt: Int) -> Unit = ::defaultRetryBackoff,
+    private val now: () -> Long = { System.currentTimeMillis() },
 ) : IcsCalendarRepository {
     override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> =
+        fetchEvents(range, forceRefresh = false)
+
+    override suspend fun fetchEvents(
+        range: DateRange,
+        forceRefresh: Boolean,
+    ): List<CalendarEvent> =
         withContext(Dispatchers.IO) {
             require(feedUrl.isNotBlank()) { "ICS feed URL is not configured." }
 
-            val request = Request.Builder()
-                .url(feedUrl)
-                .get()
-                .build()
+            val body = cacheMutex.withLock {
+                cachedFeed?.takeIf { cached ->
+                    !forceRefresh && now() - cached.loadedAtMillis in 0 until CACHE_TTL_MILLIS
+                }?.body ?: fetchWithRetry(
+                    Request.Builder()
+                        .url(feedUrl)
+                        .get()
+                        .build(),
+                ).also { freshBody ->
+                    cachedFeed = CachedFeed(freshBody, now())
+                }
+            }
 
-            fetchWithRetry(request, range)
+            parser.parse(body, range)
         }
 
     private suspend fun fetchWithRetry(
         request: Request,
-        range: DateRange,
-    ): List<CalendarEvent> {
+    ): String {
         var attempt = 1
         while (true) {
             try {
@@ -44,7 +60,7 @@ class OkHttpIcsCalendarRepository(
 
                     val body = response.body?.string()
                         ?: throw IOException("Failed to fetch ICS feed: empty response body")
-                    parser.parse(body, range)
+                    body
                 }
             } catch (exception: IOException) {
                 if (attempt >= MAX_ATTEMPTS || !exception.isTransient()) {
@@ -63,8 +79,17 @@ class OkHttpIcsCalendarRepository(
         val code: Int,
     ) : IOException("Failed to fetch ICS feed: HTTP $code")
 
+    private data class CachedFeed(
+        val body: String,
+        val loadedAtMillis: Long,
+    )
+
+    private val cacheMutex = Mutex()
+    private var cachedFeed: CachedFeed? = null
+
     private companion object {
         const val MAX_ATTEMPTS = 3
+        const val CACHE_TTL_MILLIS = 15 * 60 * 1_000L
 
         fun defaultIcsHttpClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

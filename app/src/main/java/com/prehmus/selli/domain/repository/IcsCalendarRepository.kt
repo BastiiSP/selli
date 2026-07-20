@@ -5,4 +5,6 @@ import com.prehmus.selli.domain.model.DateRange
 
 interface IcsCalendarRepository {
     suspend fun fetchEvents(range: DateRange): List<CalendarEvent>
+    suspend fun fetchEvents(range: DateRange, forceRefresh: Boolean): List<CalendarEvent> =
+        fetchEvents(range)
 }

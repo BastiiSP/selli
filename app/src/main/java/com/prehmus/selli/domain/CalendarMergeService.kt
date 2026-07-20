@@ -10,6 +10,8 @@ interface CalendarMergeService {
     suspend fun mergedEvents(range: DateRange): List<CalendarEvent>
     suspend fun mergedEventsWithStatus(range: DateRange): MergedCalendar =
         MergedCalendar(mergedEvents(range), emptyList())
+    suspend fun mergedEventsWithStatus(range: DateRange, forceRefresh: Boolean): MergedCalendar =
+        mergedEventsWithStatus(range)
     suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock>
     suspend fun isBothFree(day: LocalDate): Boolean = freeBlocks(day).isNotEmpty()
 }

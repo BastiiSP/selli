@@ -27,6 +27,71 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DefaultCalendarMergeServiceTest {
+    @Test
+    fun mergedEventsWithStatus_forwardsForceRefreshToEverySource() = runTest {
+        val google = RecordingGoogleCalendarRepository()
+        val bastiIcs = RecordingIcsCalendarRepository()
+        val melliIcs = RecordingIcsCalendarRepository()
+        val service = DefaultCalendarMergeService(
+            googleCalendarRepository = google,
+            icsCalendarRepository = bastiIcs,
+            melliIcsCalendarRepository = melliIcs,
+        )
+
+        service.mergedEventsWithStatus(testRange, forceRefresh = true)
+
+        assertEquals(listOf(true), google.forceRefreshValues)
+        assertEquals(listOf(true), bastiIcs.forceRefreshValues)
+        assertEquals(listOf(true), melliIcs.forceRefreshValues)
+    }
+
+    @Test
+    fun mergedEventsWithStatus_keepsLastSuccessfulSourceEventsWhenNextFetchFails() = runTest {
+        val googleEvent = event(id = "last-good")
+        val google = RecordingGoogleCalendarRepository(
+            results = ArrayDeque(
+                listOf(
+                    Result.success(listOf(googleEvent)),
+                    Result.failure(IllegalStateException("Google unavailable")),
+                ),
+            ),
+        )
+        val service = DefaultCalendarMergeService(
+            googleCalendarRepository = google,
+            icsCalendarRepository = RecordingIcsCalendarRepository(),
+        )
+
+        service.mergedEventsWithStatus(testRange)
+        val result = service.mergedEventsWithStatus(testRange, forceRefresh = true)
+
+        assertEquals(listOf(googleEvent), result.events)
+        assertEquals(
+            listOf(SourceLoadError("Google-Kalender", "Google unavailable")),
+            result.errors,
+        )
+    }
+
+    @Test
+    fun mergedEventsWithStatus_returnsEmptySourceAndErrorWithoutLastSuccessfulEvents() = runTest {
+        val google = RecordingGoogleCalendarRepository(
+            results = ArrayDeque(
+                listOf(Result.failure(IllegalStateException("Google unavailable"))),
+            ),
+        )
+        val service = DefaultCalendarMergeService(
+            googleCalendarRepository = google,
+            icsCalendarRepository = RecordingIcsCalendarRepository(),
+        )
+
+        val result = service.mergedEventsWithStatus(testRange, forceRefresh = true)
+
+        assertTrue(result.events.isEmpty())
+        assertEquals(
+            listOf(SourceLoadError("Google-Kalender", "Google unavailable")),
+            result.errors,
+        )
+    }
+
 
     @Test
     fun mergedEventsWithStatus_collectsFailedSourcesAndKeepsSuccessfulEvents() = runTest {
@@ -914,6 +979,49 @@ class DefaultCalendarMergeServiceTest {
         override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> {
             failure?.let { throw it }
             return events
+        }
+    }
+
+    private class RecordingGoogleCalendarRepository(
+        private val results: ArrayDeque<Result<List<CalendarEvent>>> =
+            ArrayDeque(listOf(Result.success(emptyList()))),
+    ) : GoogleCalendarRepository {
+        val forceRefreshValues = mutableListOf<Boolean>()
+
+        override suspend fun signIn(): AuthResult = error("Not needed for merge tests")
+
+        override suspend fun grantMutualAccess(
+            ownAccount: Account,
+            partnerAccount: Account,
+        ): Result<Unit> = error("Not needed for merge tests")
+
+        override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> =
+            fetchEvents(range, forceRefresh = false)
+
+        override suspend fun fetchEvents(
+            range: DateRange,
+            forceRefresh: Boolean,
+        ): List<CalendarEvent> {
+            forceRefreshValues += forceRefresh
+            return (if (results.size > 1) results.removeFirst() else results.first()).getOrThrow()
+        }
+    }
+
+    private class RecordingIcsCalendarRepository(
+        private val results: ArrayDeque<Result<List<CalendarEvent>>> =
+            ArrayDeque(listOf(Result.success(emptyList()))),
+    ) : IcsCalendarRepository {
+        val forceRefreshValues = mutableListOf<Boolean>()
+
+        override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> =
+            fetchEvents(range, forceRefresh = false)
+
+        override suspend fun fetchEvents(
+            range: DateRange,
+            forceRefresh: Boolean,
+        ): List<CalendarEvent> {
+            forceRefreshValues += forceRefresh
+            return (if (results.size > 1) results.removeFirst() else results.first()).getOrThrow()
         }
     }
 

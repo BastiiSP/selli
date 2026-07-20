@@ -56,10 +56,12 @@ class GoogleCalendarDataRepository(
         Context.MODE_PRIVATE,
     ),
     logger: CalendarLogger = NoOpCalendarLogger,
+    now: () -> Long = { System.currentTimeMillis() },
 ) : GoogleCalendarRepository, CalendarRepository, SessionRepository {
     private val credentialManager = CredentialManager.create(context.applicationContext)
     private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
     private val rruleFormatter = GoogleRruleFormatter(zoneId)
+    private val eventCache = GoogleCalendarEventCache(now)
 
     override suspend fun signIn(): AuthResult {
         val activity = activity
@@ -135,13 +137,19 @@ class GoogleCalendarDataRepository(
             }
         }
 
-    override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> {
+    override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> =
+        fetchEvents(range, forceRefresh = false)
+
+    override suspend fun fetchEvents(
+        range: DateRange,
+        forceRefresh: Boolean,
+    ): List<CalendarEvent> = eventCache.load(range, forceRefresh) {
         val ownAccount = requireStoredAccount(OWN_PREFIX)
         val partnerAccount = requireStoredAccount(PARTNER_PREFIX)
         val timeMin = range.start.atStartOfDay().toGoogleDateTime()
         val timeMax = range.endInclusive.plusDays(1).atStartOfDay().toGoogleDateTime()
 
-        return withGoogleCalendarDispatcher(ioDispatcher) {
+        withGoogleCalendarDispatcher(ioDispatcher) {
             val service = withGoogleApiAuthTranslation { calendar(ownAccount.email) }
             eventFetcher.fetch(
                 fetchOwn = {

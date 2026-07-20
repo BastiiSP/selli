@@ -26,6 +26,8 @@ import java.time.LocalTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class DefaultCalendarMergeService(
     private val googleCalendarRepository: GoogleCalendarRepository,
@@ -35,25 +37,33 @@ class DefaultCalendarMergeService(
     private val logger: CalendarLogger = NoOpCalendarLogger,
     private val melliIcsCalendarRepository: IcsCalendarRepository? = null,
 ) : CalendarMergeService {
+    private val lastSuccessfulEventsMutex = Mutex()
+    private val lastSuccessfulEvents = mutableMapOf<SourceRangeKey, List<CalendarEvent>>()
 
     override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> =
         mergedEventsWithStatus(range).events
 
-    override suspend fun mergedEventsWithStatus(range: DateRange): MergedCalendar = coroutineScope {
+    override suspend fun mergedEventsWithStatus(range: DateRange): MergedCalendar =
+        mergedEventsWithStatus(range, forceRefresh = false)
+
+    override suspend fun mergedEventsWithStatus(
+        range: DateRange,
+        forceRefresh: Boolean,
+    ): MergedCalendar = coroutineScope {
         val googleEvents = async {
-            fetchSource(GOOGLE_SOURCE, GOOGLE_DISPLAY_NAME) {
-                googleCalendarRepository.fetchEvents(range)
+            fetchSource(GOOGLE_SOURCE, GOOGLE_DISPLAY_NAME, range) {
+                googleCalendarRepository.fetchEvents(range, forceRefresh)
             }
         }
         val icsEvents = async {
-            fetchSource(BASTI_ICS_SOURCE, BASTI_ICS_DISPLAY_NAME) {
-                icsCalendarRepository.fetchEvents(range)
+            fetchSource(BASTI_ICS_SOURCE, BASTI_ICS_DISPLAY_NAME, range) {
+                icsCalendarRepository.fetchEvents(range, forceRefresh)
             }
         }
         val melliIcsEvents = melliIcsCalendarRepository?.let { repository ->
             async {
-                fetchSource(MELLI_ICS_SOURCE, MELLI_ICS_DISPLAY_NAME) {
-                    repository.fetchEvents(range)
+                fetchSource(MELLI_ICS_SOURCE, MELLI_ICS_DISPLAY_NAME, range) {
+                    repository.fetchEvents(range, forceRefresh)
                 }
             }
         }
@@ -255,10 +265,15 @@ class DefaultCalendarMergeService(
     private suspend fun fetchSource(
         source: String,
         displayName: String,
+        range: DateRange,
         fetchEvents: suspend () -> List<CalendarEvent>,
     ): SourceResult =
         try {
-            SourceResult(events = fetchEvents())
+            val events = fetchEvents()
+            lastSuccessfulEventsMutex.withLock {
+                lastSuccessfulEvents[SourceRangeKey(source, range)] = events.toList()
+            }
+            SourceResult(events = events)
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: CalendarAuthRequiredException) {
@@ -266,7 +281,9 @@ class DefaultCalendarMergeService(
         } catch (exception: Exception) {
             logger.error(source, exception)
             SourceResult(
-                events = emptyList(),
+                events = lastSuccessfulEventsMutex.withLock {
+                    lastSuccessfulEvents[SourceRangeKey(source, range)].orEmpty()
+                },
                 error = SourceLoadError(
                     displayName = displayName,
                     message = exception.message.orEmpty(),
@@ -277,6 +294,11 @@ class DefaultCalendarMergeService(
     private data class SourceResult(
         val events: List<CalendarEvent>,
         val error: SourceLoadError? = null,
+    )
+
+    private data class SourceRangeKey(
+        val source: String,
+        val range: DateRange,
     )
 
     private data class TimeInterval(
