@@ -39,9 +39,7 @@ import com.prehmus.selli.ui.components.SelliMascot
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.Duration
-import java.time.YearMonth
 import java.time.format.DateTimeFormatter
-import java.time.format.TextStyle
 import java.util.Locale
 
 private val HeaderTimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
@@ -55,11 +53,11 @@ private val HeaderTimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMA
  */
 @Composable
 fun MascotHeader(
-    month: YearMonth,
+    title: String,
     isSyncing: Boolean,
     freeBlocks: List<FreeTimeBlock>,
-    onPreviousMonth: () -> Unit,
-    onNextMonth: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
     onManageCustomizations: () -> Unit,
     onSwitchAccount: () -> Unit,
     onFreeBlockClick: (FreeTimeBlock) -> Unit,
@@ -109,22 +107,23 @@ fun MascotHeader(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onPreviousMonth) {
+                    IconButton(onClick = onPrevious) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = "Voriger Monat",
+                            contentDescription = "Zurück",
                             tint = onAccentColor(),
                         )
                     }
                     Text(
-                        text = "${month.month.getDisplayName(TextStyle.FULL, Locale.GERMAN)} ${month.year}",
+                        text = title,
                         style = MaterialTheme.typography.titleLarge,
                         color = onAccentColor(),
+                        modifier = Modifier.weight(1f, fill = false),
                     )
-                    IconButton(onClick = onNextMonth) {
+                    IconButton(onClick = onNext) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = "Nächster Monat",
+                            contentDescription = "Weiter",
                             tint = onAccentColor(),
                         )
                     }

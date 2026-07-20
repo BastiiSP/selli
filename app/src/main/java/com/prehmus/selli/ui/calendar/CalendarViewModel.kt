@@ -8,7 +8,6 @@ import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CustomizationTarget
-import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
@@ -30,6 +29,8 @@ data class CalendarUiState(
     val visibleMonth: YearMonth,
     val selectedDay: LocalDate,
     val today: LocalDate,
+    /** Aktive Zeitraum-Darstellung des mittleren Bausteins (Monat/Woche/Tag). */
+    val viewMode: CalendarViewMode = CalendarViewMode.MONTH,
     val eventsByDay: Map<LocalDate, List<CalendarEvent>> = emptyMap(),
     val isSyncing: Boolean = false,
     /** Alle qualifizierenden gemeinsamen freien Blöcke am ausgewählten Tag (≥3h, 9–22 Uhr). */
@@ -92,10 +93,12 @@ class CalendarViewModel(
         _uiState.update { it.copy(isSyncing = true) }
         viewModelScope.launch {
             runCatching {
-                // Etwas Puffer um den Monat, damit Wochenüberhänge im Grid gefüllt sind.
-                val range = DateRange(
-                    start = month.atDay(1).minusDays(7),
-                    endInclusive = month.atEndOfMonth().plusDays(7),
+                // Zeitraum je nach aktiver Ansicht (Monat/Woche/Tag), jeweils mit Puffer,
+                // damit Ränder gefüllt sind — dieselben Daten, nur ein anderer Ausschnitt.
+                val range = fetchRangeFor(
+                    mode = _uiState.value.viewMode,
+                    visibleMonth = month,
+                    anchorDay = _uiState.value.selectedDay,
                 )
                 mergeService.mergedEvents(range)
             }.onSuccess { events ->
@@ -120,6 +123,45 @@ class CalendarViewModel(
     fun showMonth(month: YearMonth) {
         _uiState.update { it.copy(visibleMonth = month) }
         refresh()
+    }
+
+    /** Wechselt die Zeitraum-Darstellung; Termine/Kategorien/Freizeit bleiben unberührt. */
+    fun setViewMode(mode: CalendarViewMode) {
+        if (_uiState.value.viewMode == mode) return
+        _uiState.update {
+            it.copy(
+                viewMode = mode,
+                // Woche/Tag ankern am ausgewählten Tag, damit der Fetch-Zeitraum passt.
+                visibleMonth = if (mode == CalendarViewMode.MONTH) it.visibleMonth else YearMonth.from(it.selectedDay),
+            )
+        }
+        refresh()
+    }
+
+    /** Vor-/Zurück-Navigation, die sich an die aktive Ansicht anpasst (Monat/Woche/Tag). */
+    fun showPrevious() = navigate(-1)
+
+    fun showNext() = navigate(1)
+
+    private fun navigate(direction: Int) {
+        when (_uiState.value.viewMode) {
+            CalendarViewMode.MONTH ->
+                _uiState.update { it.copy(visibleMonth = it.visibleMonth.plusMonths(direction.toLong())) }
+            CalendarViewMode.WEEK -> moveSelectedDay(_uiState.value.selectedDay.plusWeeks(direction.toLong()))
+            CalendarViewMode.DAY -> moveSelectedDay(_uiState.value.selectedDay.plusDays(direction.toLong()))
+        }
+        refresh()
+    }
+
+    private fun moveSelectedDay(target: LocalDate) {
+        _uiState.update {
+            it.copy(
+                selectedDay = target,
+                visibleMonth = YearMonth.from(target),
+                freeBlocksOnSelectedDay = emptyList(),
+            )
+        }
+        refreshFreeBlocks(target)
     }
 
     fun selectDay(day: LocalDate) {

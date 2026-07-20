@@ -13,12 +13,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.EventCategory
+import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.theme.onAccentColor
+import com.prehmus.selli.ui.theme.personColor
 import com.prehmus.selli.ui.theme.selliGradient
 
 /** Deutscher Anzeigename der Kategorie. */
@@ -26,6 +32,44 @@ fun EventCategory.label(): String = when (this) {
     EventCategory.WORK -> "Arbeit"
     EventCategory.PRIVATE -> "Privat"
     EventCategory.TOGETHER -> "Wir-Zeit"
+}
+
+/**
+ * Getönte Darstellung einer Kategorie im Zeitstrahl — dieselbe Farbsprache wie die
+ * Kategorie-Chips ([CategoryChip]), nur als transparent getönte Fläche statt voller
+ * Pill. [fill] füllt den Terminblock (weich, durchscheinend), [edge] ist der
+ * kräftigere linke Akzentstreifen (Verlauf bei Wir-Zeit) und [content] die
+ * Text-/Detailfarbe darauf. Keine zweite Farblogik – nur die vorhandene, getönt.
+ */
+data class CategoryTimelineStyle(
+    val fill: Brush,
+    val edge: Brush,
+    val content: Color,
+)
+
+@Composable
+@ReadOnlyComposable
+fun categoryTimelineStyle(category: EventCategory): CategoryTimelineStyle = when (category) {
+    EventCategory.TOGETHER -> {
+        // Wir-Zeit: der Lila-Grün-Verlauf, als sanft getönte Fläche.
+        val melli = personColor(Person.MELLI)
+        val basti = personColor(Person.BASTI)
+        CategoryTimelineStyle(
+            fill = Brush.linearGradient(listOf(melli.copy(alpha = 0.22f), basti.copy(alpha = 0.22f))),
+            edge = selliGradient(),
+            content = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+    EventCategory.WORK -> CategoryTimelineStyle(
+        fill = SolidColor(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)),
+        edge = SolidColor(MaterialTheme.colorScheme.secondary),
+        content = MaterialTheme.colorScheme.onSecondaryContainer,
+    )
+    EventCategory.PRIVATE -> CategoryTimelineStyle(
+        fill = SolidColor(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
+        edge = SolidColor(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)),
+        content = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 /**
