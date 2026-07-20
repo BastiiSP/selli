@@ -28,6 +28,7 @@ import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.SessionState
@@ -196,6 +197,17 @@ class GoogleCalendarDataRepository(
                     ownEmail = ownAccount.email,
                     partnerEmail = partnerAccount?.email,
                 )
+            }
+        }
+
+    override suspend fun deleteEvent(event: CalendarEvent, scope: DeletionScope): Result<Unit> =
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            runGoogleApiCatching {
+                require(event.source == CalendarSource.GOOGLE_OWN) {
+                    "Nur eigene Google-Kalender-Termine können gelöscht werden."
+                }
+                val ownAccount = requireStoredAccount(OWN_PREFIX)
+                GoogleCalendarEventDeletion(calendar(ownAccount.email), zoneId).deleteOrThrow(event, scope)
             }
         }
 
