@@ -14,6 +14,7 @@ import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
@@ -26,6 +27,46 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DefaultCalendarMergeServiceTest {
+
+    @Test
+    fun mergedEventsWithStatus_collectsFailedSourcesAndKeepsSuccessfulEvents() = runTest {
+        val bastiWorkEvent = event(id = "basti-work", source = CalendarSource.WORK_ICS)
+        val service = service(
+            googleFailure = IllegalStateException("Google nicht erreichbar"),
+            icsEvents = listOf(bastiWorkEvent),
+            melliIcsFailure = IllegalStateException("Dr. Plano antwortet nicht"),
+        )
+
+        val result = service.mergedEventsWithStatus(testRange)
+
+        assertEquals(
+            listOf(bastiWorkEvent.copy(category = EventCategory.WORK)),
+            result.events,
+        )
+        assertEquals(
+            listOf(
+                SourceLoadError("Google-Kalender", "Google nicht erreichbar"),
+                SourceLoadError("Mellis Arbeitskalender", "Dr. Plano antwortet nicht"),
+            ),
+            result.errors,
+        )
+    }
+
+    @Test
+    fun mergedEventsWithStatus_returnsEmptyErrorsWhenAllSourcesSucceed() = runTest {
+        val service = service(
+            googleEvents = listOf(event(id = "google")),
+            icsEvents = listOf(event(id = "basti", source = CalendarSource.WORK_ICS)),
+            melliIcsEvents = listOf(
+                event(id = "melli", source = CalendarSource.WORK_ICS, owner = Person.MELLI),
+            ),
+        )
+
+        val result = service.mergedEventsWithStatus(testRange)
+
+        assertEquals(3, result.events.size)
+        assertTrue(result.errors.isEmpty())
+    }
 
     @Test
     fun mergedEvents_mergesBothSources() = runTest {

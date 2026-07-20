@@ -13,6 +13,8 @@ import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
+import com.prehmus.selli.domain.model.MergedCalendar
+import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
@@ -34,27 +36,45 @@ class DefaultCalendarMergeService(
     private val melliIcsCalendarRepository: IcsCalendarRepository? = null,
 ) : CalendarMergeService {
 
-    override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = coroutineScope {
+    override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> =
+        mergedEventsWithStatus(range).events
+
+    override suspend fun mergedEventsWithStatus(range: DateRange): MergedCalendar = coroutineScope {
         val googleEvents = async {
-            fetchEventsOrEmpty(GOOGLE_SOURCE) { googleCalendarRepository.fetchEvents(range) }
+            fetchSource(GOOGLE_SOURCE, GOOGLE_DISPLAY_NAME) {
+                googleCalendarRepository.fetchEvents(range)
+            }
         }
         val icsEvents = async {
-            fetchEventsOrEmpty(BASTI_ICS_SOURCE) { icsCalendarRepository.fetchEvents(range) }
+            fetchSource(BASTI_ICS_SOURCE, BASTI_ICS_DISPLAY_NAME) {
+                icsCalendarRepository.fetchEvents(range)
+            }
         }
         val melliIcsEvents = melliIcsCalendarRepository?.let { repository ->
             async {
-                fetchEventsOrEmpty(MELLI_ICS_SOURCE) { repository.fetchEvents(range) }
+                fetchSource(MELLI_ICS_SOURCE, MELLI_ICS_DISPLAY_NAME) {
+                    repository.fetchEvents(range)
+                }
             }
         }
 
-        val merged = (googleEvents.await() + icsEvents.await() + melliIcsEvents?.await().orEmpty())
+        val sourceResults = listOfNotNull(
+            googleEvents.await(),
+            icsEvents.await(),
+            melliIcsEvents?.await(),
+        )
+        val merged = sourceResults.flatMap { result -> result.events }
             .distinctBy { event -> Triple(event.id, event.source, event.owner) }
 
-        applyCustomizationsOrOriginal(merged)
+        val events = applyCustomizationsOrOriginal(merged)
             .sortedWith(
                 compareByDescending<CalendarEvent> { event -> event.isAllDay }
                     .thenBy { event -> event.start },
             )
+        MergedCalendar(
+            events = events,
+            errors = sourceResults.mapNotNull { result -> result.error },
+        )
     }
 
     private suspend fun applyCustomizationsOrOriginal(
@@ -232,20 +252,32 @@ class DefaultCalendarMergeService(
         return merged
     }
 
-    private suspend fun fetchEventsOrEmpty(
+    private suspend fun fetchSource(
         source: String,
+        displayName: String,
         fetchEvents: suspend () -> List<CalendarEvent>,
-    ): List<CalendarEvent> =
+    ): SourceResult =
         try {
-            fetchEvents()
+            SourceResult(events = fetchEvents())
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: CalendarAuthRequiredException) {
             throw exception
         } catch (exception: Exception) {
             logger.error(source, exception)
-            emptyList()
+            SourceResult(
+                events = emptyList(),
+                error = SourceLoadError(
+                    displayName = displayName,
+                    message = exception.message.orEmpty(),
+                ),
+            )
         }
+
+    private data class SourceResult(
+        val events: List<CalendarEvent>,
+        val error: SourceLoadError? = null,
+    )
 
     private data class TimeInterval(
         val start: LocalDateTime,
@@ -256,6 +288,9 @@ class DefaultCalendarMergeService(
         const val GOOGLE_SOURCE = "Google calendars"
         const val BASTI_ICS_SOURCE = "Basti ICS work calendar"
         const val MELLI_ICS_SOURCE = "Melli ICS work calendar"
+        const val GOOGLE_DISPLAY_NAME = "Google-Kalender"
+        const val BASTI_ICS_DISPLAY_NAME = "Bastis Arbeitskalender"
+        const val MELLI_ICS_DISPLAY_NAME = "Mellis Arbeitskalender"
         const val CUSTOMIZATION_SOURCE = "Event customizations"
         val FREE_WINDOW_START: LocalTime = LocalTime.of(9, 0)
         val FREE_WINDOW_END: LocalTime = LocalTime.of(22, 0)
