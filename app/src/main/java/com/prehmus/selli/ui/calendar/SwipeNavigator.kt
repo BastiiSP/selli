@@ -84,15 +84,16 @@ fun SwipeNavigator(
         },
     ) {
         // Pixelmaße des Bereichs für die Maskottchen-Reise.
+        val mascotSize = 132.dp
         val widthPx = with(LocalDensity.current) { maxWidth.toPx() }
         val heightPx = with(LocalDensity.current) { maxHeight.toPx() }
-        val mascotSizePx = with(LocalDensity.current) { 64.dp.toPx() }
+        val mascotSizePx = with(LocalDensity.current) { mascotSize.toPx() }
 
         AnimatedContent(
             targetState = contentKey,
             transitionSpec = {
-                val anim = tween<Float>(durationMillis = 300, easing = FastOutSlowInEasing)
-                val slideAnim = tween<IntOffset>(durationMillis = 300, easing = FastOutSlowInEasing)
+                val anim = tween<Float>(durationMillis = 520, easing = FastOutSlowInEasing)
+                val slideAnim = tween<IntOffset>(durationMillis = 520, easing = FastOutSlowInEasing)
                 when {
                     direction > 0 -> // vor: neu kommt von rechts, alt geht nach links → Seite wandert LINKS
                         (slideInHorizontally(slideAnim) { it } + fadeIn(anim)) togetherWith
@@ -124,7 +125,7 @@ fun SwipeNavigator(
             }
             if (direction == 0) return@LaunchedEffect
             progress.snapTo(0f)
-            progress.animateTo(1f, animationSpec = tween(380, easing = FastOutSlowInEasing))
+            progress.animateTo(1f, animationSpec = tween(720, easing = FastOutSlowInEasing))
         }
 
         val p = progress.value
@@ -146,8 +147,9 @@ fun SwipeNavigator(
                 mirror = false
             }
             val x = startX + (endX - startX) * p
-            // Vertikal im unteren Mittelband (~58 % nach unten).
-            val y = 0.58f * heightPx
+            // Vertikal ungefähr mittig, mit der Maskottchen-Höhe verrechnet, damit die
+            // größere Pose nicht am unteren Rand abgeschnitten wird.
+            val y = 0.52f * heightPx - mascotSizePx / 2f
 
             // Alpha-Hüllkurve: einblenden (0→0.2), halten, ausblenden (0.7→1.0).
             val alpha = when {
@@ -162,7 +164,7 @@ fun SwipeNavigator(
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .offset { IntOffset(x.roundToInt(), y.roundToInt()) }
-                    .size(64.dp)
+                    .size(mascotSize)
                     .graphicsLayer {
                         this.alpha = alpha
                         scaleX = if (mirror) -1f else 1f
