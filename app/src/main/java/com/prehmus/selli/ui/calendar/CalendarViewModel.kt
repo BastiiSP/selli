@@ -19,6 +19,8 @@ import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -74,6 +76,12 @@ class CalendarViewModel(
     private val _uiState: MutableStateFlow<CalendarUiState>
     val uiState: StateFlow<CalendarUiState>
 
+    // Schnelles, wiederholtes Blättern (oder eine manuelle Aktualisierung mitten in einem
+    // laufenden Fetch) darf sich nicht stapeln: Jeder neue Refresh bricht den vorherigen ab.
+    // Das verhindert paralleles „Hämmern" der Kalenderquellen (relevant für den fremden
+    // Dr.-Plano-ICS-Server) und dass eine veraltete, langsamere Antwort die frische überschreibt.
+    private var refreshJob: Job? = null
+
     init {
         val today = LocalDate.now()
         _uiState = MutableStateFlow(
@@ -87,12 +95,18 @@ class CalendarViewModel(
         refresh()
     }
 
-    /** MVP-Sync-Modell: Refresh beim App-Öffnen bzw. auf Nutzerwunsch. */
+    /**
+     * MVP-Sync-Modell: Refresh beim App-Öffnen, beim Blättern und jederzeit manuell
+     * (Pull-to-Refresh / Menü) — deckt so auch den Fall ab, dass die *andere* Person
+     * während der laufenden Sitzung etwas einträgt. Kein Push/Realtime (bewusst).
+     */
     fun refresh() {
         val month = _uiState.value.visibleMonth
         _uiState.update { it.copy(isSyncing = true) }
-        viewModelScope.launch {
-            runCatching {
+        // Vorherigen (evtl. noch laufenden) Refresh abbrechen — nur der jüngste zählt.
+        refreshJob?.cancel()
+        refreshJob = viewModelScope.launch {
+            try {
                 // Zeitraum je nach aktiver Ansicht (Monat/Woche/Tag), jeweils mit Puffer,
                 // damit Ränder gefüllt sind — dieselben Daten, nur ein anderer Ausschnitt.
                 val range = fetchRangeFor(
@@ -100,21 +114,20 @@ class CalendarViewModel(
                     visibleMonth = month,
                     anchorDay = _uiState.value.selectedDay,
                 )
-                mergeService.mergedEvents(range)
-            }.onSuccess { events ->
+                val events = mergeService.mergedEvents(range)
                 _uiState.update { it.copy(isSyncing = false, eventsByDay = events.groupByDay()) }
                 refreshFreeBlocks(_uiState.value.selectedDay)
-            }.onFailure { error ->
-                when (error) {
-                    is GoogleRecoverableAuthException -> _uiState.update {
-                        it.copy(isSyncing = false, pendingConsent = error.recoveryIntent)
-                    }
-                    else -> _uiState.update {
-                        it.copy(
-                            isSyncing = false,
-                            userMessage = error.message ?: "Kalender konnten nicht geladen werden.",
-                        )
-                    }
+            } catch (cancellation: CancellationException) {
+                // Ein neuerer Refresh hat übernommen — dessen Lauf besitzt jetzt isSyncing.
+                throw cancellation
+            } catch (error: GoogleRecoverableAuthException) {
+                _uiState.update { it.copy(isSyncing = false, pendingConsent = error.recoveryIntent) }
+            } catch (error: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isSyncing = false,
+                        userMessage = error.message ?: "Kalender konnten nicht geladen werden.",
+                    )
                 }
             }
         }

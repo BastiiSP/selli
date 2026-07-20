@@ -18,10 +18,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -56,6 +58,7 @@ import java.util.Locale
  * Outlook-Kalender, bewusst übernommen) im warmen Selli-Look. Alle Termine
  * beider Personen plus Arbeitskalender in einer gemeinsamen Ansicht.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
@@ -142,6 +145,7 @@ fun CalendarScreen(
                 onToggleCollapsed = { layout.updateHeaderCollapsed(!layout.headerCollapsed) },
                 onPrevious = goPrevious,
                 onNext = goNext,
+                onRefresh = viewModel::refresh,
                 onManageCustomizations = viewModel::openCustomizationManager,
                 onSwitchAccount = { showSwitchAccountDialog = true },
                 onFreeBlockClick = viewModel::openCreateSheetForFreeBlock,
@@ -156,15 +160,21 @@ fun CalendarScreen(
             // Pfeile oben) blättern innerhalb der aktiven Ansicht (Monat/Woche/Tag) und
             // lösen dieselbe kurze, richtungsabhängige Slide-Animation mit dem
             // schiebenden Maskottchen aus. Der Header oben bleibt unberührt.
-            SwipeNavigator(
-                contentKey = periodKey,
-                direction = navDirection,
-                onNext = goNext,
-                onPrevious = goPrevious,
+            // Nach unten ziehen aktualisiert manuell (fängt neue Termine der anderen Person ab).
+            PullToRefreshBox(
+                isRefreshing = uiState.isSyncing,
+                onRefresh = viewModel::refresh,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
+                SwipeNavigator(
+                    contentKey = periodKey,
+                    direction = navDirection,
+                    onNext = goNext,
+                    onPrevious = goPrevious,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -238,6 +248,7 @@ fun CalendarScreen(
                             )
                         }
                     }
+                }
                 }
             }
         }

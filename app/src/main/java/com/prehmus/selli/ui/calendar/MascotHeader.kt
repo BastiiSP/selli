@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -62,6 +63,7 @@ fun MascotHeader(
     onToggleCollapsed: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
+    onRefresh: () -> Unit,
     onManageCustomizations: () -> Unit,
     onSwitchAccount: () -> Unit,
     onFreeBlockClick: (FreeTimeBlock) -> Unit,
@@ -96,6 +98,7 @@ fun MascotHeader(
                 )
                 CoupleAvatars(size = 34.dp)
                 HeaderMenu(
+                    onRefresh = onRefresh,
                     onManageCustomizations = onManageCustomizations,
                     onSwitchAccount = onSwitchAccount,
                 )
@@ -286,9 +289,10 @@ private fun formatDuration(duration: Duration): String {
     }
 }
 
-/** Überlaufmenü im Header: Verwaltung der lokalen Anpassungen und "Konto wechseln". */
+/** Überlaufmenü im Header: manuelle Aktualisierung, Verwaltung der lokalen Anpassungen und "Konto wechseln". */
 @Composable
 private fun HeaderMenu(
+    onRefresh: () -> Unit,
     onManageCustomizations: () -> Unit,
     onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier,
@@ -304,6 +308,14 @@ private fun HeaderMenu(
             )
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            DropdownMenuItem(
+                text = { Text("Jetzt aktualisieren") },
+                leadingIcon = { Icon(Icons.Default.Refresh, contentDescription = null) },
+                onClick = {
+                    expanded = false
+                    onRefresh()
+                },
+            )
             DropdownMenuItem(
                 text = { Text("Ausgeblendet & angepasst") },
                 onClick = {
