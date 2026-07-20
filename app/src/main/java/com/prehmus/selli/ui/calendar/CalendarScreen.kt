@@ -3,15 +3,22 @@ package com.prehmus.selli.ui.calendar
 import android.app.Activity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -27,8 +34,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.ui.settings.rememberLayoutPreferences
 import com.prehmus.selli.ui.event.CreateEventSheet
 import com.prehmus.selli.ui.event.CustomizationManagerSheet
 import com.prehmus.selli.ui.event.EditEventSheet
@@ -54,6 +65,11 @@ fun CalendarScreen(
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     var showSwitchAccountDialog by remember { mutableStateOf(false) }
+    // Gemeinsame, dauerhaft gespeicherte Layout-Aufteilung für alle drei Ansichten.
+    val layout = rememberLayoutPreferences()
+    // Höhe des mittleren Bereichs (Kalender + Liste) in px — Basis, um Zieh-Deltas des
+    // Handles in einen Verhältnis-Anteil umzurechnen.
+    var middleHeightPx by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let { message ->
@@ -122,6 +138,8 @@ fun CalendarScreen(
                 title = calendarHeaderTitle(uiState.viewMode, uiState.visibleMonth, uiState.selectedDay),
                 isSyncing = uiState.isSyncing,
                 freeBlocks = uiState.freeBlocksOnSelectedDay,
+                collapsed = layout.headerCollapsed,
+                onToggleCollapsed = { layout.updateHeaderCollapsed(!layout.headerCollapsed) },
                 onPrevious = goPrevious,
                 onNext = goNext,
                 onManageCustomizations = viewModel::openCustomizationManager,
@@ -147,12 +165,32 @@ fun CalendarScreen(
                     .weight(1f)
                     .fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.fillMaxSize()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .onSizeChanged { middleHeightPx = it.height },
+                ) {
+                    // Kalender (Grid/Zeitstrahl) und Terminliste teilen sich den Platz nach
+                    // dem gespeicherten, per Zieh-Handle einstellbaren Verhältnis — gemeinsam
+                    // für alle drei Ansichten. So bekommt die Liste an vollen Tagen mehr Raum.
+                    val calendarWeight = layout.calendarFraction
+                    val listWeight = 1f - calendarWeight
+
+                    // Zieh-Handle: verschiebt live das Verhältnis (Delta relativ zur
+                    // Bereichshöhe), sichert nach dem Loslassen.
+                    val resizeHandle: @Composable () -> Unit = {
+                        CalendarListResizeHandle(
+                            onDrag = { deltaPx ->
+                                if (middleHeightPx > 0) {
+                                    layout.nudgeCalendarFraction(deltaPx / middleHeightPx)
+                                }
+                            },
+                            onDragStopped = layout::persistCalendarFraction,
+                        )
+                    }
+
                     when (uiState.viewMode) {
                         CalendarViewMode.MONTH -> {
-                            // Monatsraster und Terminliste teilen sich den Platz nach festem
-                            // Verhältnis (wie Zeitstrahl/Liste in Woche/Tag), damit die Liste
-                            // auch bei vollem 6-Wochen-Monat mehrere Termine zeigen kann.
                             MonthGrid(
                                 month = uiState.visibleMonth,
                                 today = uiState.today,
@@ -160,15 +198,16 @@ fun CalendarScreen(
                                 eventsByDay = uiState.eventsByDay,
                                 onSelectDay = viewModel::selectDay,
                                 modifier = Modifier
-                                    .weight(1.3f)
+                                    .weight(calendarWeight)
                                     .padding(horizontal = 12.dp),
                             )
+                            resizeHandle()
                             DayDetail(
                                 day = uiState.selectedDay,
                                 events = uiState.selectedDayEvents,
                                 bothFree = uiState.bothFreeOnSelectedDay,
                                 onEventClick = viewModel::selectEvent,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(listWeight),
                             )
                         }
                         else -> {
@@ -187,15 +226,15 @@ fun CalendarScreen(
                                 eventsByDay = uiState.eventsByDay,
                                 onSelectDay = viewModel::selectDay,
                                 onEventClick = viewModel::selectEvent,
-                                modifier = Modifier.weight(1.3f),
+                                modifier = Modifier.weight(calendarWeight),
                             )
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            resizeHandle()
                             DayDetail(
                                 day = uiState.selectedDay,
                                 events = uiState.selectedDayEvents,
                                 bothFree = uiState.bothFreeOnSelectedDay,
                                 onEventClick = viewModel::selectEvent,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(listWeight),
                             )
                         }
                     }
@@ -264,6 +303,38 @@ fun CalendarScreen(
             dismissButton = {
                 TextButton(onClick = { showSwitchAccountDialog = false }) { Text("Abbrechen") }
             },
+        )
+    }
+}
+
+/**
+ * Schlankes Zieh-Handle zwischen Kalender und Terminliste: ein weiches Griff-Pill,
+ * das vertikal gezogen das Größenverhältnis verschiebt. Nur vertikale Gesten — die
+ * horizontale Wischnavigation des [SwipeNavigator] bleibt unberührt.
+ */
+@Composable
+private fun CalendarListResizeHandle(
+    onDrag: (deltaPx: Float) -> Unit,
+    onDragStopped: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(22.dp)
+            .draggable(
+                orientation = Orientation.Vertical,
+                state = rememberDraggableState { delta -> onDrag(delta) },
+                onDragStopped = { onDragStopped() },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(44.dp)
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.outlineVariant),
         )
     }
 }

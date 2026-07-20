@@ -16,6 +16,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -56,6 +58,8 @@ fun MascotHeader(
     title: String,
     isSyncing: Boolean,
     freeBlocks: List<FreeTimeBlock>,
+    collapsed: Boolean,
+    onToggleCollapsed: () -> Unit,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onManageCustomizations: () -> Unit,
@@ -78,7 +82,7 @@ fun MascotHeader(
         Column(
             modifier = Modifier
                 .statusBarsPadding()
-                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 16.dp),
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = if (collapsed) 4.dp else 12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -128,21 +132,63 @@ fun MascotHeader(
                         )
                     }
                 }
-                Box(
-                    modifier = Modifier
-                        .size(76.dp)
-                        .background(onAccentColor().copy(alpha = 0.18f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    SelliMascot(mood = mood, modifier = Modifier.size(60.dp))
+                // Das reagierende Maskottchen ist Teil der vollen Ansicht; im eingeklappten
+                // Header weicht es zugunsten des Platzgewinns.
+                if (!collapsed) {
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .background(onAccentColor().copy(alpha = 0.18f), CircleShape),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        SelliMascot(mood = mood, modifier = Modifier.size(60.dp))
+                    }
                 }
             }
 
-            FreeTimeSection(
-                isSyncing = isSyncing,
-                freeBlocks = freeBlocks,
-                onFreeBlockClick = onFreeBlockClick,
-                modifier = Modifier.padding(top = 8.dp),
+            if (!collapsed) {
+                FreeTimeSection(
+                    isSyncing = isSyncing,
+                    freeBlocks = freeBlocks,
+                    onFreeBlockClick = onFreeBlockClick,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+
+            CollapseToggle(
+                collapsed = collapsed,
+                onToggle = onToggleCollapsed,
+                modifier = Modifier.padding(top = if (collapsed) 2.dp else 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Griff am unteren Header-Rand: klappt den Header zwischen voller (Maskottchen +
+ * gemeinsame freie Blöcke) und platzsparender Kurzform um. Der eingestellte Zustand
+ * wird gemeinsam mit der Kalender/Liste-Aufteilung dauerhaft gespeichert.
+ */
+@Composable
+private fun CollapseToggle(
+    collapsed: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = onAccentColor().copy(alpha = 0.16f),
+            onClick = onToggle,
+        ) {
+            Icon(
+                imageVector = if (collapsed) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowUp,
+                contentDescription = if (collapsed) "Header ausklappen" else "Header einklappen",
+                tint = onAccentColor(),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 1.dp),
             )
         }
     }
