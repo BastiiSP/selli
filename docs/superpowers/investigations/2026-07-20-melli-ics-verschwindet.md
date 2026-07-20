@@ -1,7 +1,7 @@
 # Untersuchung: Mellis ICS-Arbeitskalender verschwindet zeitweise
 
-**Datum:** 2026-07-20  
-**Status:** Plausibelste Root Cause adressiert; ohne Mellis Gerät nicht zu 100 % reproduziert
+**Datum:** 2026-07-20, bestätigt am 2026-07-21  
+**Status:** Root Cause live bestätigt (HTTP 429 von Dr. Plano). Sichtbarkeit funktioniert wie geplant; die eigentliche Überlastung ist noch nicht behoben (siehe „Bestätigung" und „Empfohlener Folge-Fix" unten).
 
 ## Symptom
 
@@ -58,3 +58,20 @@ adb logcat -d -s SelliCalendar
 ```
 
 Zeigt die UI beziehungsweise der Log zeitgleich `SocketTimeoutException`, eine andere `IOException`, HTTP 429 oder HTTP 5xx, ist die Hypothese für diesen Vorfall bestätigt. Zeigt er stattdessen eine Parserexception, einen nicht transienten HTTP-4xx-Status oder einen Konfigurationsfehler, ist die Hypothese für diesen Vorfall verworfen und die konkrete gemeldete Fehlerklasse ist der neue Ausgangspunkt. Bleibt die Fehlerliste leer, obwohl ausschließlich Mellis ICS-Termine fehlen, muss der Datenfluss nach dem Merge-Service (UI-State/Filter) untersucht werden.
+
+## Bestätigung am 2026-07-21
+
+Kurz nach dem Merge des Fixes trat der sichtbare Fehler bereits auf Bastis eigenem Gerät auf — Auslöser war diesmal intensives manuelles Testen (mehrfacher Wechsel Monat/Woche/Tag, App-Neustart, mehrere manuelle „Erneut"-Versuche), nicht Mellis Gerät. Live-Log (`adb logcat`, Tag `SelliCalendar`), zwei unabhängige Fetch-Versuche im Abstand von etwa einer Sekunde:
+
+```
+E SelliCalendar: Failed to fetch events from Melli ICS work calendar
+E SelliCalendar: com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository$IcsHttpException: Failed to fetch ICS feed: HTTP 429
+```
+
+Das bestätigt die Hypothese „Transienter Dr.-Plano-Server-/Netzwerkfehler unter Last" exakt: Dr. Planos Server antwortet mit `429 Too Many Requests`. Beide Fetch-Versuche (App-Start und manuelles „Erneut" kurz danach) scheiterten trotz der 3 eingebauten Retry-Versuche — bei einer aktiven Rate-Begrenzung durch den Server helfen schnelle Wiederholungsversuche (250 ms/500 ms/1 s Backoff) nicht, weil das Zeitfenster der Sperre vermutlich deutlich länger ist als die gesamte Retry-Dauer. Ein sofortiges erneutes „Erneut" verlängert die Sperre im schlimmsten Fall sogar zusätzlich.
+
+**Wichtige Erkenntnis:** Der Grund, warum ausgerechnet Mellis Dr.-Plano-Feed betroffen ist und Google/Outlook nicht, ist jetzt klar — nicht weil Selli ihn anders behandelt, sondern weil jede einzelne Navigation (Ansicht wechseln, App öffnen, manuelles Aktualisieren) den **kompletten** Feed alle drei Quellen parallel neu herunterlädt (siehe „Verifizierte Fakten" oben), und Dr. Planos Server diese Frequenz offenbar deutlich enger begrenzt als Google/Microsoft.
+
+## Empfohlener Folge-Fix
+
+Der bisherige Fix (Timeouts, Retry, sichtbarer Fehler) erfüllt seinen Zweck vollständig: Das Problem ist jetzt sichtbar statt lautlos. Er behebt aber nicht die eigentliche Überlastung, weil Selli bei jeder Navigation weiterhin den vollständigen Feed neu abruft. Ein Folge-Fix sollte die Abrufhäufigkeit selbst senken, z. B. durch ein kurzlebiges In-Memory-Caching des rohen Feeds pro Quelle (Navigation innerhalb eines kurzen Zeitfensters nutzt den zuletzt geladenen Feed statt eines Netzwerk-Requests) und/oder eine harte Mindestwartezeit zwischen zwei Requests an dieselbe Quelle. Das ist ein eigener Design-Punkt (Cache-Dauer, Verhalten bei explizitem „Erneut", Umgang mit `Retry-After`-Header falls vorhanden) und kein reiner Bugfix mehr — dafür lohnt sich ein kurzes Brainstorming vor dem nächsten Handover-Prompt.
