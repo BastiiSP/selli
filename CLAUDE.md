@@ -62,9 +62,17 @@ Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und 
 - `./gradlew assembleDebug` – Debug-Build
 - `./gradlew testDebugUnitTest` – Unit-Tests, insbesondere für von Codex gelieferte Logik-Module
 
-## Bekannter Stand (Stand 19.07.2026)
+## Bekannter Stand (Stand 20.07.2026)
 
-MVP-Kern ist fertig: Google-Kalender-Anbindung inkl. automatischer ACL-Freigabe, ICS-Arbeitskalender mit eigenem RFC-5545-Parser, Zusammenführungslogik inkl. `isBothFree`, komplette Kalender-UI, Homescreen-Widget, finale Illustrationen (inkl. Avataren mit echter Ähnlichkeit) eingebunden. Consent-Flow abgefangen, erster Verbinden-Crash (Google-Konto-Auswahl) und Dark-Mode-Textkontrast behoben. Kalenderquellen sind fehler-isoliert: eigener Google-Kalender, Partner-Google-Kalender und ICS-Feed scheitern unabhängig; Fetch-Fehler werden über `CalendarLogger` (`domain/logging`, Android-Implementierung `AndroidCalendarLogger`, Log-Tag `SelliCalendar`) geloggt statt still geschluckt. 39 Unit-Tests grün. Bekannte offene Punkte:
+MVP-Kern ist fertig: Google-Kalender-Anbindung inkl. automatischer ACL-Freigabe, ICS-Arbeitskalender mit eigenem RFC-5545-Parser, Zusammenführungslogik inkl. `isBothFree`, komplette Kalender-UI, Homescreen-Widget, finale Illustrationen (inkl. Avataren mit echter Ähnlichkeit) eingebunden. Consent-Flow abgefangen, erster Verbinden-Crash (Google-Konto-Auswahl) und Dark-Mode-Textkontrast behoben. Kalenderquellen sind fehler-isoliert: eigener Google-Kalender, Partner-Google-Kalender und ICS-Feed scheitern unabhängig; Fetch-Fehler werden über `CalendarLogger` (`domain/logging`, Android-Implementierung `AndroidCalendarLogger`, Log-Tag `SelliCalendar`) geloggt statt still geschluckt.
+
+Alltagstauglichkeits-Block umgesetzt (20.07.2026):
+- **Sitzung merken:** `SessionRepository` (`sessionState()`/`resetSession()`, implementiert vom `GoogleCalendarDataRepository` über die ohnehin persistierten Konten) — App-Start springt bei vollständiger Verknüpfung direkt in den Kalender, bei halber Verknüpfung zum Partner-Schritt; „Konto wechseln …" im Header-Menü setzt nur Sellis Verknüpfung zurück.
+- **Lokale Ausblendungen/Anpassungen:** `EventCustomizationRepository` (JSON-Datei-Store `FileEventCustomizationRepository` unter `data/customization/`, Gson) + Anwendung im `DefaultCalendarMergeService`. Targets: einzelnes Vorkommen oder Serie ab Vorkommen (`CustomizationTarget.SeriesFrom`, Occurrence schlägt Series). Der echte Google-Kalender wird nie verändert. UI: Termin antippen → Aktionen-Sheet, Verwaltung über „Ausgeblendet & angepasst" im Header-Menü. `CalendarEvent` hat dafür `seriesId` (Google: `recurringEventId`, ICS: UID) und `isCustomized`.
+- **Serien anlegen:** `NewCalendarEvent.recurrence` (`EventRecurrence`: DAILY/WEEKLY/MONTHLY/YEARLY + optionales inklusives `until`) → `GoogleRruleFormatter` erzeugt die RRULE, Google verwaltet die Serie nativ; Fetch expandiert via `singleEvents=true`.
+
+67 Unit-Tests grün. Bekannte offene Punkte:
+- Neuer Block (Session-Restore, Overrides, Serien) noch nicht end-to-end am echten Gerät durchgetestet
 - `isBothFree` verfeinert (≥3h zusammenhängender freier Block, 9–22 Uhr), aber noch nicht end-to-end am echten Gerät durchgetestet
 - MONTHLY/YEARLY-RRULEs aus dem ICS-Feed erscheinen bewusst nur als Einzeltermin am Startdatum (dokumentierte Einschränkung, kein Bug)
 - App-Icon-Vordergrund evtl. zu randvoll für manche Launcher-Masken (siehe Designkonzept oben)
