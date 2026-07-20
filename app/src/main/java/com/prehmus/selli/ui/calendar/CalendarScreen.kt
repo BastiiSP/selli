@@ -149,7 +149,7 @@ fun CalendarScreen(
                 onToggleCollapsed = { layout.updateHeaderCollapsed(!layout.headerCollapsed) },
                 onPrevious = goPrevious,
                 onNext = goNext,
-                onRefresh = viewModel::refresh,
+                onRefresh = { viewModel.refresh(forceNetwork = true) },
                 onManageCustomizations = viewModel::openCustomizationManager,
                 onSwitchAccount = { showSwitchAccountDialog = true },
                 onFreeBlockClick = viewModel::openCreateSheetForFreeBlock,
@@ -165,7 +165,7 @@ fun CalendarScreen(
             if (uiState.loadErrors.isNotEmpty()) {
                 SourceLoadErrorBanner(
                     errors = uiState.loadErrors,
-                    onRetry = viewModel::refresh,
+                    onRetry = { viewModel.refresh(forceNetwork = true) },
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
             }
@@ -177,7 +177,7 @@ fun CalendarScreen(
             // Nach unten ziehen aktualisiert manuell (fängt neue Termine der anderen Person ab).
             PullToRefreshBox(
                 isRefreshing = uiState.isSyncing,
-                onRefresh = viewModel::refresh,
+                onRefresh = { viewModel.refresh(forceNetwork = true) },
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),

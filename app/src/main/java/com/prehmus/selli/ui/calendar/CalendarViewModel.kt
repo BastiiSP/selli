@@ -103,8 +103,14 @@ class CalendarViewModel(
      * MVP-Sync-Modell: Refresh beim App-Öffnen, beim Blättern und jederzeit manuell
      * (Pull-to-Refresh / Menü) — deckt so auch den Fall ab, dass die *andere* Person
      * während der laufenden Sitzung etwas einträgt. Kein Push/Realtime (bewusst).
+     *
+     * [forceNetwork] = true umgeht den quellenweisen Kurzzeit-Cache und erzwingt echte
+     * Netzwerk-Anfragen. Das ist für **manuelles** Aktualisieren (Pull-to-Refresh, „Erneut",
+     * Menü) sowie nach eigenen Schreibvorgängen (Anlegen/Löschen) gewollt. Automatisches
+     * Nachladen durch Navigation lässt [forceNetwork] = false, damit reines Blättern nie in
+     * die Server-Ratenbegrenzung (Dr. Plano HTTP 429) läuft.
      */
-    fun refresh() {
+    fun refresh(forceNetwork: Boolean = false) {
         val month = _uiState.value.visibleMonth
         _uiState.update { it.copy(isSyncing = true) }
         // Vorherigen (evtl. noch laufenden) Refresh abbrechen — nur der jüngste zählt.
@@ -118,7 +124,7 @@ class CalendarViewModel(
                     visibleMonth = month,
                     anchorDay = _uiState.value.selectedDay,
                 )
-                val merged = mergeService.mergedEventsWithStatus(range)
+                val merged = mergeService.mergedEventsWithStatus(range, forceNetwork)
                 _uiState.update {
                     it.copy(
                         isSyncing = false,
@@ -236,7 +242,7 @@ class CalendarViewModel(
                             userMessage = "Termin angelegt.",
                         )
                     }
-                    refresh()
+                    refresh(forceNetwork = true)
                 }
                 .onFailure { error ->
                     _uiState.update {
@@ -311,7 +317,7 @@ class CalendarViewModel(
             calendarRepository.deleteEvent(event, scope)
                 .onSuccess {
                     _uiState.update { it.copy(userMessage = "Termin gelöscht.") }
-                    refresh()
+                    refresh(forceNetwork = true)
                 }
                 .onFailure { error ->
                     _uiState.update {
@@ -470,7 +476,7 @@ class CalendarViewModel(
     fun onConsentResult(granted: Boolean) {
         _uiState.update { it.copy(pendingConsent = null) }
         if (granted) {
-            refresh()
+            refresh(forceNetwork = true)
         } else {
             _uiState.update {
                 it.copy(userMessage = "Ohne Google-Zustimmung kann Selli eure Kalender nicht laden.")
