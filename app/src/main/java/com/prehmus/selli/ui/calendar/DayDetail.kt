@@ -133,28 +133,8 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
                     PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
                 }
                 CategoryChip(category = event.category)
-                if (event.isCustomized) {
-                    CustomizedBadge()
-                }
             }
         }
-    }
-}
-
-/** Kennzeichnung für Termine, die nur in Sellis Ansicht angepasst wurden. */
-@Composable
-private fun CustomizedBadge(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.tertiaryContainer,
-    ) {
-        Text(
-            text = "Angepasst",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onTertiaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
     }
 }
 
