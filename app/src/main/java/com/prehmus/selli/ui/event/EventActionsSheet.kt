@@ -1,5 +1,6 @@
 package com.prehmus.selli.ui.event
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -8,9 +9,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +30,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.CalendarEvent
+import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.ui.components.CategorySelector
 import com.prehmus.selli.ui.components.PersonPill
@@ -50,11 +55,16 @@ fun EventActionsSheet(
     onHide: (wholeSeries: Boolean) -> Unit,
     onSetCategory: (category: EventCategory, wholeSeries: Boolean) -> Unit,
     onResetCustomization: () -> Unit,
+    onDelete: (scope: DeletionScope) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var pendingScopeAction by remember { mutableStateOf<ScopeAction?>(null) }
     // Bei Serien wird vor dem Umkategorisieren der Geltungsbereich erfragt.
     var pendingCategory by remember { mutableStateOf<EventCategory?>(null) }
+    // Echtes Löschen wird immer per Dialog bestätigt (destruktiv, verändert Google).
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    // Nur eigene Google-Termine lassen sich echt löschen; sonst bleibt nur lokales Ausblenden.
+    val canDelete = event.source == CalendarSource.GOOGLE_OWN
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -145,7 +155,78 @@ fun EventActionsSheet(
                     Text("Anpassung zurücksetzen", modifier = Modifier.padding(start = 8.dp))
                 }
             }
+
+            // Echtes Löschen nur für eigene Google-Termine. Bewusst rot umrandet mit
+            // transparenter Füllung, damit die destruktive Aktion nicht versehentlich
+            // wie die daneben liegenden, harmlosen Aktionen aussieht.
+            if (canDelete) {
+                OutlinedButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Text("Endgültig löschen", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
         }
+    }
+
+    if (showDeleteConfirm) {
+        val destructiveColors = ButtonDefaults.textButtonColors(
+            contentColor = MaterialTheme.colorScheme.error,
+        )
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(if (event.seriesId == null) "Termin löschen?" else "Serientermin löschen?") },
+            text = {
+                Text(
+                    buildString {
+                        append("„${event.title}“ wird endgültig aus deinem Google-Kalender ")
+                        append("entfernt. Das lässt sich nicht rückgängig machen.")
+                        if (event.seriesId != null) {
+                            append(" Wähle, wie viel der Serie gelöscht wird — ")
+                            append("vergangene Vorkommen bleiben unberührt.")
+                        }
+                    },
+                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (event.seriesId == null) {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirm = false
+                                onDelete(DeletionScope.SINGLE_OCCURRENCE)
+                            },
+                            colors = destructiveColors,
+                        ) { Text("Löschen") }
+                    } else {
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirm = false
+                                onDelete(DeletionScope.SINGLE_OCCURRENCE)
+                            },
+                            colors = destructiveColors,
+                        ) { Text("Nur dieses Vorkommen") }
+                        TextButton(
+                            onClick = {
+                                showDeleteConfirm = false
+                                onDelete(DeletionScope.THIS_AND_FOLLOWING)
+                            },
+                            colors = destructiveColors,
+                        ) { Text("Dieses und alle folgenden") }
+                    }
+                    TextButton(
+                        onClick = { showDeleteConfirm = false },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Abbrechen") }
+                }
+            },
+        )
     }
 
     pendingScopeAction?.let { action ->

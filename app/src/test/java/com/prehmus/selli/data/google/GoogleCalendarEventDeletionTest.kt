@@ -9,9 +9,11 @@ import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.Person
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.util.zip.GZIPInputStream
 import kotlinx.coroutines.test.runTest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -68,7 +70,7 @@ class GoogleCalendarEventDeletionTest {
             val update = server.takeRequest()
             assertEquals("PUT", update.method)
             assertEquals("/calendar/v3/calendars/primary/events/series-1", update.path)
-            val body = update.body.readUtf8()
+            val body = update.decodedBody()
             assertTrue(body.contains("FREQ=WEEKLY;INTERVAL=2;BYDAY=MO;UNTIL=20260720T075959Z"))
             assertFalse(body.contains("COUNT"))
         }
@@ -157,4 +159,11 @@ class GoogleCalendarEventDeletionTest {
         MockResponse()
             .addHeader("Content-Type", "application/json")
             .setBody(body)
+
+    private fun RecordedRequest.decodedBody(): String =
+        if (getHeader("Content-Encoding").equals("gzip", ignoreCase = true)) {
+            GZIPInputStream(body.inputStream()).bufferedReader().use { it.readText() }
+        } else {
+            body.readUtf8()
+        }
 }

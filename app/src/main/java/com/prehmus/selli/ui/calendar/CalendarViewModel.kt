@@ -8,6 +8,7 @@ import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
@@ -294,6 +295,29 @@ class CalendarViewModel(
                 ),
                 successMessage = "Kategorie nur in Selli gesetzt — dein Google-Kalender bleibt unverändert.",
             )
+        }
+    }
+
+    /**
+     * Löscht den ausgewählten Termin **echt** über die Google Calendar API (nur eigene
+     * Google-Termine — die UI bietet die Aktion sonst nicht an). Bei Serien entscheidet
+     * [scope] über „nur dieses Vorkommen" vs. „dieses und alle folgenden". Anders als das
+     * lokale Ausblenden verändert das den echten Kalender.
+     */
+    fun deleteSelectedEvent(scope: DeletionScope) {
+        val event = _uiState.value.selectedEvent ?: return
+        _uiState.update { it.copy(selectedEvent = null) }
+        viewModelScope.launch {
+            calendarRepository.deleteEvent(event, scope)
+                .onSuccess {
+                    _uiState.update { it.copy(userMessage = "Termin gelöscht.") }
+                    refresh()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Termin konnte nicht gelöscht werden.")
+                    }
+                }
         }
     }
 
