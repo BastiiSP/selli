@@ -3,6 +3,7 @@ package com.prehmus.selli.data.customization
 import com.google.gson.Gson
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
@@ -49,6 +50,7 @@ class EventCustomizationCodec(
             endTime = overrides.endTime?.toString(),
             location = overrides.location,
             description = overrides.description,
+            category = overrides.category?.name,
             label = label,
         )
     }
@@ -81,6 +83,7 @@ class EventCustomizationCodec(
                 endTime = endTime?.let { value -> LocalTime.parse(value) },
                 location = location,
                 description = description,
+                category = category?.let { value -> EventCategory.valueOf(value) },
             ),
             label = label,
         )
@@ -104,6 +107,7 @@ class EventCustomizationCodec(
         val endTime: String?,
         val location: String?,
         val description: String?,
+        val category: String?,
         val label: String,
     )
 

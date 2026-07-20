@@ -5,11 +5,14 @@ import com.prehmus.selli.domain.logging.CalendarLogger
 import com.prehmus.selli.domain.logging.NoOpCalendarLogger
 import com.prehmus.selli.domain.model.CalendarAuthRequiredException
 import com.prehmus.selli.domain.model.CalendarEvent
+import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
+import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
@@ -57,7 +60,7 @@ class DefaultCalendarMergeService(
             throw exception
         } catch (exception: Exception) {
             logger.error(CUSTOMIZATION_SOURCE, exception)
-            return events
+            emptyList()
         }
 
         val occurrenceCustomizations = customizations
@@ -75,15 +78,22 @@ class DefaultCalendarMergeService(
             val customization = occurrenceCustomizations[EventKey(event.source, event.id)]
                 ?: seriesCustomizations.latestMatchFor(event)
 
-            when {
-                customization == null -> event
-                customization.hidden -> null
-                else -> event.withOverrides(
-                    overrides = customization.overrides,
-                    allowDateOverride = customization.target is CustomizationTarget.Occurrence,
-                )
-            }
+            if (customization?.hidden == true) return@mapNotNull null
+
+            val overrides = customization?.overrides ?: EventFieldOverrides()
+            val resolvedCategory = overrides.category ?: deriveDefaultCategory(event)
+            event.withOverrides(
+                overrides = overrides,
+                allowDateOverride = customization?.target is CustomizationTarget.Occurrence,
+                category = resolvedCategory,
+            )
         }
+    }
+
+    private fun deriveDefaultCategory(event: CalendarEvent): EventCategory = when {
+        event.source == CalendarSource.WORK_ICS -> EventCategory.WORK
+        event.isSharedEvent -> EventCategory.TOGETHER
+        else -> EventCategory.PRIVATE
     }
 
     private fun List<EventCustomization>.latestMatchFor(event: CalendarEvent): EventCustomization? =
@@ -101,32 +111,42 @@ class DefaultCalendarMergeService(
     private fun CalendarEvent.withOverrides(
         overrides: EventFieldOverrides,
         allowDateOverride: Boolean,
+        category: EventCategory,
     ): CalendarEvent {
-        val hasApplicableOverride =
+        val hasFieldOverride =
             overrides.title != null ||
                 (allowDateOverride && overrides.date != null) ||
                 (!isAllDay && (overrides.startTime != null || overrides.endTime != null)) ||
                 overrides.location != null ||
                 overrides.description != null
-        if (!hasApplicableOverride) return this
+        val hasCategoryOverride = overrides.category != null
+        val hasApplicableOverride = hasFieldOverride || hasCategoryOverride
 
-        val overriddenDate = overrides.date.takeIf { allowDateOverride }
         val newStart: LocalDateTime
         val newEnd: LocalDateTime
-        if (isAllDay) {
-            val dayShift = overriddenDate?.let { newDate ->
-                Duration.between(start.toLocalDate().atStartOfDay(), newDate.atStartOfDay()).toDays()
-            } ?: 0L
-            newStart = start.plusDays(dayShift)
-            newEnd = end.plusDays(dayShift)
+        if (!hasFieldOverride) {
+            newStart = start
+            newEnd = end
         } else {
-            val startDate = overriddenDate ?: start.toLocalDate()
-            val endDayOffset = Duration.between(
-                start.toLocalDate().atStartOfDay(),
-                end.toLocalDate().atStartOfDay(),
-            ).toDays()
-            newStart = startDate.atTime(overrides.startTime ?: start.toLocalTime())
-            newEnd = startDate.plusDays(endDayOffset).atTime(overrides.endTime ?: end.toLocalTime())
+            val overriddenDate = overrides.date.takeIf { allowDateOverride }
+            if (isAllDay) {
+                val dayShift = overriddenDate?.let { newDate ->
+                    Duration.between(
+                        start.toLocalDate().atStartOfDay(),
+                        newDate.atStartOfDay(),
+                    ).toDays()
+                } ?: 0L
+                newStart = start.plusDays(dayShift)
+                newEnd = end.plusDays(dayShift)
+            } else {
+                val startDate = overriddenDate ?: start.toLocalDate()
+                val endDayOffset = Duration.between(
+                    start.toLocalDate().atStartOfDay(),
+                    end.toLocalDate().atStartOfDay(),
+                ).toDays()
+                newStart = startDate.atTime(overrides.startTime ?: start.toLocalTime())
+                newEnd = startDate.plusDays(endDayOffset).atTime(overrides.endTime ?: end.toLocalTime())
+            }
         }
 
         return copy(
@@ -135,16 +155,17 @@ class DefaultCalendarMergeService(
             end = newEnd,
             location = overrides.location ?: location,
             description = overrides.description ?: description,
-            isCustomized = true,
+            category = category,
+            isCustomized = hasApplicableOverride,
         )
     }
 
     /**
-     * Prüft, ob im gemeinsamen Tagesfenster noch mindestens ein zusammenhängender freier Block
-     * übrig ist. Ganztägige Events blockieren bewusst nicht, weil sie in den verbundenen Kalendern
-     * häufig Marker wie Geburtstage oder Urlaub sind.
+     * Liefert alle mindestens drei Stunden langen Blöcke im gemeinsamen Tagesfenster.
+     * Ganztägige Events blockieren bewusst nicht, weil sie in den verbundenen Kalendern häufig
+     * Marker wie Geburtstage oder Urlaub sind.
      */
-    override suspend fun isBothFree(day: LocalDate): Boolean {
+    override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> {
         val window = TimeInterval(
             start = day.atTime(FREE_WINDOW_START),
             end = day.atTime(FREE_WINDOW_END),
@@ -157,17 +178,21 @@ class DefaultCalendarMergeService(
             .toList()
             .mergeTouching()
 
+        val free = mutableListOf<FreeTimeBlock>()
         var cursor = window.start
         for (blockedInterval in blockedIntervals) {
             if (Duration.between(cursor, blockedInterval.start) >= MINIMUM_SHARED_FREE_BLOCK) {
-                return true
+                free += FreeTimeBlock(cursor, blockedInterval.start)
             }
             if (blockedInterval.end > cursor) {
                 cursor = blockedInterval.end
             }
         }
 
-        return Duration.between(cursor, window.end) >= MINIMUM_SHARED_FREE_BLOCK
+        if (Duration.between(cursor, window.end) >= MINIMUM_SHARED_FREE_BLOCK) {
+            free += FreeTimeBlock(cursor, window.end)
+        }
+        return free
     }
 
     private fun CalendarEvent.blockedIntervalIn(window: TimeInterval): TimeInterval? {

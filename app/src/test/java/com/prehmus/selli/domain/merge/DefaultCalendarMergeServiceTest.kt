@@ -8,9 +8,11 @@ import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
+import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
@@ -44,7 +46,13 @@ class DefaultCalendarMergeServiceTest {
 
         val result = service.mergedEvents(testRange)
 
-        assertEquals(listOf(googleEvent, icsEvent), result)
+        assertEquals(
+            listOf(
+                googleEvent,
+                icsEvent.copy(category = EventCategory.WORK),
+            ),
+            result,
+        )
     }
 
     @Test
@@ -96,7 +104,13 @@ class DefaultCalendarMergeServiceTest {
 
         val result = service.mergedEvents(testRange)
 
-        assertEquals(listOf(original, sameIdDifferentSource), result)
+        assertEquals(
+            listOf(
+                original,
+                sameIdDifferentSource.copy(category = EventCategory.WORK),
+            ),
+            result,
+        )
     }
 
     @Test
@@ -109,7 +123,7 @@ class DefaultCalendarMergeServiceTest {
 
         val result = service.mergedEvents(testRange)
 
-        assertEquals(listOf(icsEvent), result)
+        assertEquals(listOf(icsEvent.copy(category = EventCategory.WORK)), result)
     }
 
     @Test
@@ -382,6 +396,146 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_derivesCategoryFromSourceAndSharedStatus() = runTest {
+        val privateEvent = event(id = "private")
+        val sharedEvent = event(id = "shared", isSharedEvent = true)
+        val workEvent = event(id = "work", source = CalendarSource.WORK_ICS)
+        val service = service(
+            googleEvents = listOf(privateEvent, sharedEvent),
+            icsEvents = listOf(workEvent),
+        )
+
+        val result = service.mergedEvents(testRange).associateBy { event -> event.id }
+
+        assertEquals(EventCategory.PRIVATE, result.getValue("private").category)
+        assertEquals(EventCategory.TOGETHER, result.getValue("shared").category)
+        assertEquals(EventCategory.WORK, result.getValue("work").category)
+    }
+
+    @Test
+    fun mergedEvents_appliesOccurrenceCategoryOverride() = runTest {
+        val original = event(id = "private")
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(category = EventCategory.WORK),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+
+        assertEquals(EventCategory.WORK, customized.category)
+        assertTrue(customized.isCustomized)
+        assertEquals(original.start, customized.start)
+        assertEquals(original.end, customized.end)
+    }
+
+    @Test
+    fun mergedEvents_appliesSeriesCategoryOverrideFromBoundary() = runTest {
+        val past = event(id = "past", start = dateTime(hour = 9), seriesId = "series")
+        val boundary = event(id = "boundary", start = dateTime(hour = 10), seriesId = "series")
+        val future = event(id = "future", start = dateTime(hour = 11), seriesId = "series")
+        val service = service(
+            googleEvents = listOf(past, boundary, future),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        source = CalendarSource.GOOGLE_OWN,
+                        seriesId = "series",
+                        fromStart = boundary.start,
+                    ),
+                    overrides = EventFieldOverrides(category = EventCategory.TOGETHER),
+                ),
+            ),
+        )
+
+        val result = service.mergedEvents(testRange).associateBy { event -> event.id }
+
+        assertEquals(EventCategory.PRIVATE, result.getValue("past").category)
+        assertFalse(result.getValue("past").isCustomized)
+        assertEquals(EventCategory.TOGETHER, result.getValue("boundary").category)
+        assertTrue(result.getValue("boundary").isCustomized)
+        assertEquals(EventCategory.TOGETHER, result.getValue("future").category)
+        assertTrue(result.getValue("future").isCustomized)
+    }
+
+    @Test
+    fun freeBlocks_returnsEveryQualifyingGapInStartOrder() = runTest {
+        val service = service(
+            googleEvents = listOf(
+                event(id = "midday", start = testDay.atTime(12, 0), end = testDay.atTime(14, 0)),
+                event(id = "evening", start = testDay.atTime(18, 0), end = testDay.atTime(22, 0)),
+            ),
+        )
+
+        assertEquals(
+            listOf(
+                FreeTimeBlock(testDay.atTime(9, 0), testDay.atTime(12, 0)),
+                FreeTimeBlock(testDay.atTime(14, 0), testDay.atTime(18, 0)),
+            ),
+            service.freeBlocks(testDay),
+        )
+    }
+
+    @Test
+    fun freeBlocks_ignoresAllDayEvents() = runTest {
+        val service = service(
+            googleEvents = listOf(
+                event(
+                    id = "all-day",
+                    start = testDay.atStartOfDay(),
+                    end = testDay.plusDays(1).atStartOfDay(),
+                    isAllDay = true,
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(FreeTimeBlock(testDay.atTime(9, 0), testDay.atTime(22, 0))),
+            service.freeBlocks(testDay),
+        )
+    }
+
+    @Test
+    fun freeBlocks_returnsEmptyListWhenWindowIsFullyBlocked() = runTest {
+        val service = service(
+            googleEvents = listOf(
+                event(id = "full-day", start = testDay.atTime(9, 0), end = testDay.atTime(22, 0)),
+            ),
+        )
+
+        assertTrue(service.freeBlocks(testDay).isEmpty())
+    }
+
+    @Test
+    fun freeBlocks_includesGapOfExactlyThreeHours() = runTest {
+        val service = service(
+            googleEvents = listOf(
+                event(id = "after-gap", start = testDay.atTime(12, 0), end = testDay.atTime(22, 0)),
+            ),
+        )
+
+        assertEquals(
+            listOf(FreeTimeBlock(testDay.atTime(9, 0), testDay.atTime(12, 0))),
+            service.freeBlocks(testDay),
+        )
+    }
+
+    @Test
+    fun freeBlocks_excludesGapShorterThanThreeHours() = runTest {
+        val service = service(
+            googleEvents = listOf(
+                event(id = "after-gap", start = testDay.atTime(11, 59), end = testDay.atTime(22, 0)),
+            ),
+        )
+
+        assertTrue(service.freeBlocks(testDay).isEmpty())
+    }
+
+    @Test
     fun isBothFree_returnsTrueWhenDayIsEmpty() = runTest {
         val service = service()
 
@@ -577,6 +731,7 @@ class DefaultCalendarMergeServiceTest {
         source: CalendarSource = CalendarSource.GOOGLE_OWN,
         owner: Person = Person.BASTI,
         seriesId: String? = null,
+        isSharedEvent: Boolean = false,
     ): CalendarEvent =
         CalendarEvent(
             id = id,
@@ -586,7 +741,7 @@ class DefaultCalendarMergeServiceTest {
             isAllDay = isAllDay,
             source = source,
             owner = owner,
-            isSharedEvent = false,
+            isSharedEvent = isSharedEvent,
             seriesId = seriesId,
         )
 

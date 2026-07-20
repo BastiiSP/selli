@@ -9,6 +9,7 @@ import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.SessionState
@@ -17,6 +18,7 @@ import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.SessionRepository
+import java.time.Duration
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -100,10 +102,27 @@ class PreviewDependencies : AppDependencies {
                 .filter { it.start.toLocalDate() <= range.endInclusive && it.end.toLocalDate() >= range.start }
                 .sortedWith(compareBy({ !it.isAllDay }, { it.start }))
 
-        override suspend fun isBothFree(day: LocalDate): Boolean =
-            (sampleEvents() + createdEvents).none { event ->
-                day >= event.start.toLocalDate() && day <= event.end.toLocalDate()
+        override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> {
+            val windowStart = day.atTime(9, 0)
+            val windowEnd = day.atTime(22, 0)
+            val minBlock = Duration.ofHours(3)
+            val busy = (sampleEvents() + createdEvents)
+                .filterNot { it.isAllDay }
+                .mapNotNull { event ->
+                    val start = maxOf(event.start, windowStart)
+                    val end = minOf(event.end, windowEnd)
+                    if (start < end) start to end else null
+                }
+                .sortedBy { it.first }
+            val free = mutableListOf<FreeTimeBlock>()
+            var cursor = windowStart
+            for ((start, end) in busy) {
+                if (Duration.between(cursor, start) >= minBlock) free += FreeTimeBlock(cursor, start)
+                if (end > cursor) cursor = end
             }
+            if (Duration.between(cursor, windowEnd) >= minBlock) free += FreeTimeBlock(cursor, windowEnd)
+            return free
+        }
     }
 
     override val sessionRepository: SessionRepository = object : SessionRepository {

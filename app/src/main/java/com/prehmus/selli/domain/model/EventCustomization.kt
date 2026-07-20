@@ -14,6 +14,7 @@ data class EventFieldOverrides(
     val endTime: LocalTime? = null,
     val location: String? = null,
     val description: String? = null,
+    val category: EventCategory? = null,
 ) {
     fun isEmpty(): Boolean =
         title == null &&
@@ -21,7 +22,8 @@ data class EventFieldOverrides(
             startTime == null &&
             endTime == null &&
             location == null &&
-            description == null
+            description == null &&
+            category == null
 }
 
 sealed interface CustomizationTarget {

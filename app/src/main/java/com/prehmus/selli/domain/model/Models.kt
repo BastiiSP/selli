@@ -35,6 +35,7 @@ data class CalendarEvent(
     val description: String? = null,
     val seriesId: String? = null,
     val isCustomized: Boolean = false,
+    val category: EventCategory = EventCategory.PRIVATE,
 )
 
 data class NewCalendarEvent(
@@ -47,3 +48,5 @@ data class NewCalendarEvent(
     val invitePartner: Boolean = false,
     val recurrence: EventRecurrence? = null,
 )
+
+enum class EventCategory { WORK, PRIVATE, TOGETHER }

@@ -27,6 +27,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.CalendarEvent
+import com.prehmus.selli.domain.model.EventCategory
+import com.prehmus.selli.ui.components.CategorySelector
 import com.prehmus.selli.ui.components.PersonPill
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -46,10 +48,13 @@ fun EventActionsSheet(
     event: CalendarEvent,
     onEdit: (wholeSeries: Boolean) -> Unit,
     onHide: (wholeSeries: Boolean) -> Unit,
+    onSetCategory: (category: EventCategory, wholeSeries: Boolean) -> Unit,
     onResetCustomization: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     var pendingScopeAction by remember { mutableStateOf<ScopeAction?>(null) }
+    // Bei Serien wird vor dem Umkategorisieren der Geltungsbereich erfragt.
+    var pendingCategory by remember { mutableStateOf<EventCategory?>(null) }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -92,6 +97,24 @@ fun EventActionsSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
+            Text(
+                text = "Kategorie",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            CategorySelector(
+                selected = event.category,
+                onSelect = { category ->
+                    if (category != event.category) {
+                        if (event.seriesId == null) {
+                            onSetCategory(category, false)
+                        } else {
+                            pendingCategory = category
+                        }
+                    }
+                },
+            )
 
             Text(
                 text = "Änderungen gelten nur in Selli — der echte Kalender bleibt unverändert.",
@@ -149,6 +172,36 @@ fun EventActionsSheet(
                     }) { Text("Dieses und alle folgenden") }
                     TextButton(
                         onClick = { pendingScopeAction = null },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Abbrechen") }
+                }
+            },
+        )
+    }
+
+    pendingCategory?.let { category ->
+        AlertDialog(
+            onDismissRequest = { pendingCategory = null },
+            title = { Text("Kategorie für die Serie") },
+            text = {
+                Text(
+                    "Dieser Termin gehört zu einer Serie. Soll diese Kategorie nur für " +
+                        "dieses Vorkommen gelten oder für dieses und alle folgenden? " +
+                        "Vergangene Vorkommen bleiben unberührt.",
+                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = {
+                        pendingCategory = null
+                        onSetCategory(category, false)
+                    }) { Text("Nur dieses Vorkommen") }
+                    TextButton(onClick = {
+                        pendingCategory = null
+                        onSetCategory(category, true)
+                    }) { Text("Dieses und alle folgenden") }
+                    TextButton(
+                        onClick = { pendingCategory = null },
                         modifier = Modifier.padding(top = 8.dp),
                     ) { Text("Abbrechen") }
                 }

@@ -36,9 +36,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventRecurrence
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.RecurrenceFrequency
+import com.prehmus.selli.ui.components.CategorySelector
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.Instant
@@ -61,16 +63,20 @@ private val TimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
 fun CreateEventSheet(
     initialDay: LocalDate,
     isSaving: Boolean,
-    onSave: (NewCalendarEvent) -> Unit,
+    onSave: (NewCalendarEvent, EventCategory?) -> Unit,
     onDismiss: () -> Unit,
+    initialStartTime: LocalTime? = null,
+    initialEndTime: LocalTime? = null,
+    initialCategory: EventCategory? = null,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var isAllDay by rememberSaveable { mutableStateOf(false) }
     var invitePartner by rememberSaveable { mutableStateOf(false) }
+    var category by remember { mutableStateOf(initialCategory ?: EventCategory.PRIVATE) }
     var day by remember { mutableStateOf(initialDay) }
-    var startTime by remember { mutableStateOf(LocalTime.of(18, 0)) }
-    var endTime by remember { mutableStateOf(LocalTime.of(19, 0)) }
+    var startTime by remember { mutableStateOf(initialStartTime ?: LocalTime.of(18, 0)) }
+    var endTime by remember { mutableStateOf(initialEndTime ?: LocalTime.of(19, 0)) }
     var showDatePicker by remember { mutableStateOf(false) }
     var timePickerTarget by remember { mutableStateOf<TimeTarget?>(null) }
     // Wiederholung: Google verwaltet die Serie nativ (RRULE) — die App legt keine Einzeltermine an.
@@ -100,6 +106,13 @@ fun CreateEventSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+
+            Text(
+                text = "Kategorie",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            CategorySelector(selected = category, onSelect = { category = it })
 
             OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
                 Text(day.format(DateFormat))
@@ -178,7 +191,8 @@ fun CreateEventSheet(
                             recurrence = recurrenceFrequency?.let {
                                 EventRecurrence(frequency = it, until = recurrenceUntil)
                             },
-                        )
+                        ),
+                        category,
                     )
                 },
                 enabled = isValid && !isSaving,

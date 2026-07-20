@@ -14,4 +14,9 @@ class EventCustomizationTest {
     fun `field overrides are not empty when a field is set`() {
         assertFalse(EventFieldOverrides(title = "Changed").isEmpty())
     }
+
+    @Test
+    fun `field overrides are not empty when only category is set`() {
+        assertFalse(EventFieldOverrides(category = EventCategory.TOGETHER).isEmpty())
+    }
 }

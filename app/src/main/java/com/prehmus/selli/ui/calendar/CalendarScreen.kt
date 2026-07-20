@@ -86,11 +86,12 @@ fun CalendarScreen(
             MascotHeader(
                 month = uiState.visibleMonth,
                 isSyncing = uiState.isSyncing,
-                bothFreeOnSelectedDay = uiState.bothFreeOnSelectedDay,
+                freeBlocks = uiState.freeBlocksOnSelectedDay,
                 onPreviousMonth = { viewModel.showMonth(uiState.visibleMonth.minusMonths(1)) },
                 onNextMonth = { viewModel.showMonth(uiState.visibleMonth.plusMonths(1)) },
                 onManageCustomizations = viewModel::openCustomizationManager,
                 onSwitchAccount = { showSwitchAccountDialog = true },
+                onFreeBlockClick = viewModel::openCreateSheetForFreeBlock,
             )
             MonthGrid(
                 month = uiState.visibleMonth,
@@ -110,11 +111,15 @@ fun CalendarScreen(
     }
 
     if (uiState.isCreateSheetOpen) {
+        val prefill = uiState.createSheetPrefill
         CreateEventSheet(
             initialDay = uiState.selectedDay,
             isSaving = uiState.isSavingEvent,
             onSave = viewModel::createEvent,
             onDismiss = viewModel::dismissCreateSheet,
+            initialStartTime = prefill?.startTime,
+            initialEndTime = prefill?.endTime,
+            initialCategory = prefill?.category,
         )
     }
 
@@ -123,6 +128,7 @@ fun CalendarScreen(
             event = event,
             onEdit = viewModel::beginEditingSelectedEvent,
             onHide = viewModel::hideSelectedEvent,
+            onSetCategory = viewModel::setSelectedEventCategory,
             onResetCustomization = viewModel::resetSelectedEventCustomization,
             onDismiss = viewModel::dismissEventActions,
         )

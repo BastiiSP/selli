@@ -2,6 +2,7 @@ package com.prehmus.selli.data.customization
 
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
@@ -29,6 +30,7 @@ class EventCustomizationCodecTest {
                     endTime = LocalTime.of(16, 0),
                     location = "Berlin\nHbf",
                     description = "Platform 7",
+                    category = EventCategory.TOGETHER,
                 ),
                 label = "Original title",
             ),

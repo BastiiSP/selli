@@ -23,6 +23,7 @@ import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.ui.components.MascotMood
 import com.prehmus.selli.ui.components.SelliMascot
+import com.prehmus.selli.ui.components.label
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -109,6 +110,7 @@ private fun CustomizationRow(
                 Text(
                     text = buildString {
                         append(if (customization.hidden) "Ausgeblendet" else "Angepasst")
+                        customization.overrides.category?.let { append(" · Kategorie: ${it.label()}") }
                         val target = customization.target
                         if (target is CustomizationTarget.SeriesFrom) {
                             append(" · Serie ab ${target.fromStart.toLocalDate().format(FromDateFormat)}")

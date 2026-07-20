@@ -22,7 +22,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.CalendarEvent
-import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.EventCategory
+import com.prehmus.selli.ui.components.CategoryChip
 import com.prehmus.selli.ui.components.MascotMood
 import com.prehmus.selli.ui.components.PersonPill
 import com.prehmus.selli.ui.components.SelliMascot
@@ -83,9 +84,14 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Farbkapsel: Personenfarbe bzw. Verlauf bei gemeinsamen Terminen.
+            // Farbkapsel: Personenfarbe, bzw. der Lila-Grün-Verlauf für Wir-Zeit
+            // (und weiterhin für explizit gemeinsam erstellte Termine).
             val capsuleBrush =
-                if (event.isSharedEvent) selliGradient() else SolidColor(personColor(event.owner))
+                if (event.category == EventCategory.TOGETHER || event.isSharedEvent) {
+                    selliGradient()
+                } else {
+                    SolidColor(personColor(event.owner))
+                }
             Box(
                 modifier = Modifier
                     .width(5.dp)
@@ -121,32 +127,17 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
                 }
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
-                if (event.source == CalendarSource.WORK_ICS) {
-                    WorkBadge()
+                // Bei Wir-Zeit trägt der Verlaufs-Chip die „gemeinsam"-Aussage schon —
+                // dann keine zusätzliche „Gemeinsam"-Pill, um Dopplung zu vermeiden.
+                if (event.category != EventCategory.TOGETHER) {
+                    PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
                 }
+                CategoryChip(category = event.category)
                 if (event.isCustomized) {
                     CustomizedBadge()
                 }
             }
         }
-    }
-}
-
-/** Kennzeichnung für Termine aus Bastis (read-only) Arbeitskalender. */
-@Composable
-private fun WorkBadge(modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.secondaryContainer,
-    ) {
-        Text(
-            text = "Arbeit",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSecondaryContainer,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
     }
 }
 
