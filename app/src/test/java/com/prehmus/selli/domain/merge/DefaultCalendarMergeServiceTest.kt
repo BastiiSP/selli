@@ -428,7 +428,10 @@ class DefaultCalendarMergeServiceTest {
         val customized = service.mergedEvents(testRange).single()
 
         assertEquals(EventCategory.WORK, customized.category)
-        assertTrue(customized.isCustomized)
+        // Reine Kategorie-Änderung: kein "Angepasst"-Badge (die Kategorie-Pill zeigt das schon),
+        // aber weiterhin über "Anpassung zurücksetzen" aufhebbar.
+        assertFalse(customized.isCustomized)
+        assertTrue(customized.hasAnyCustomization)
         assertEquals(original.start, customized.start)
         assertEquals(original.end, customized.end)
     }
@@ -456,10 +459,13 @@ class DefaultCalendarMergeServiceTest {
 
         assertEquals(EventCategory.PRIVATE, result.getValue("past").category)
         assertFalse(result.getValue("past").isCustomized)
+        assertFalse(result.getValue("past").hasAnyCustomization)
         assertEquals(EventCategory.TOGETHER, result.getValue("boundary").category)
-        assertTrue(result.getValue("boundary").isCustomized)
+        assertFalse(result.getValue("boundary").isCustomized)
+        assertTrue(result.getValue("boundary").hasAnyCustomization)
         assertEquals(EventCategory.TOGETHER, result.getValue("future").category)
-        assertTrue(result.getValue("future").isCustomized)
+        assertFalse(result.getValue("future").isCustomized)
+        assertTrue(result.getValue("future").hasAnyCustomization)
     }
 
     @Test

@@ -136,7 +136,7 @@ fun EventActionsSheet(
                 Icon(Icons.Default.Clear, contentDescription = null)
                 Text("In Selli ausblenden", modifier = Modifier.padding(start = 8.dp))
             }
-            if (event.isCustomized) {
+            if (event.hasAnyCustomization) {
                 OutlinedButton(
                     onClick = onResetCustomization,
                     modifier = Modifier.fillMaxWidth(),

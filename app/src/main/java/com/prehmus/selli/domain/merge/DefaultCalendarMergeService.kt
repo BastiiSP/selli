@@ -156,7 +156,8 @@ class DefaultCalendarMergeService(
             location = overrides.location ?: location,
             description = overrides.description ?: description,
             category = category,
-            isCustomized = hasApplicableOverride,
+            isCustomized = hasFieldOverride,
+            hasAnyCustomization = hasApplicableOverride,
         )
     }
 

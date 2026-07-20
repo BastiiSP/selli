@@ -34,8 +34,15 @@ data class CalendarEvent(
     val location: String? = null,
     val description: String? = null,
     val seriesId: String? = null,
+    /** Titel/Zeit/Ort/Beschreibung wurden lokal überschrieben — treibt das "Angepasst"-Badge. */
     val isCustomized: Boolean = false,
     val category: EventCategory = EventCategory.PRIVATE,
+    /**
+     * Irgendeine lokale Anpassung liegt vor (Feld- oder reine Kategorie-Änderung) — treibt die
+     * Sichtbarkeit von "Anpassung zurücksetzen". Eine reine Kategorie-Änderung zeigt bewusst
+     * kein "Angepasst"-Badge (die Kategorie-Pill sagt das schon), bleibt aber zurücksetzbar.
+     */
+    val hasAnyCustomization: Boolean = false,
 )
 
 data class NewCalendarEvent(
