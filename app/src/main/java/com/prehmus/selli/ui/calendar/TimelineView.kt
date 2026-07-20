@@ -1,6 +1,7 @@
 package com.prehmus.selli.ui.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,7 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.CalendarEvent
-import com.prehmus.selli.ui.components.categoryTimelineStyle
+import com.prehmus.selli.ui.components.eventTimelineStyle
 import com.prehmus.selli.ui.theme.selliGradient
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -53,8 +54,9 @@ private val BlockTimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN
  * Tag (eine Spalte). Termine sitzen proportional zu Uhrzeit/Dauer, überschneidende
  * teilen sich nebeneinander die Breite; ganztägige liegen im schmalen Bereich
  * oberhalb des Rasters. „Heute" trägt einen Kreis in der Spaltenüberschrift, die
- * aktuelle Uhrzeit eine deutliche „Jetzt"-Linie. Dieselben Kategorie-Farben wie
- * überall, nur getönt.
+ * aktuelle Uhrzeit eine deutliche „Jetzt"-Linie. Termine tragen die Personenfarbe
+ * (Grün = Basti, Lila = Melli) wie in der Monatsansicht; die Kategorie tritt zurück
+ * (Arbeit = Rahmen, Wir-Zeit = Verlauf) — siehe [eventTimelineStyle].
  */
 @Composable
 fun TimelineView(
@@ -238,12 +240,14 @@ private fun AllDayLane(
 
 @Composable
 private fun AllDayChip(event: CalendarEvent, onClick: () -> Unit) {
-    val style = categoryTimelineStyle(event.category)
+    val style = eventTimelineStyle(event)
+    val shape = RoundedCornerShape(7.dp)
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(7.dp))
-            .background(style.fill, RoundedCornerShape(7.dp))
+            .clip(shape)
+            .background(style.fill, shape)
+            .then(style.outline?.let { Modifier.border(1.dp, it, shape) } ?: Modifier)
             .clickable(onClick = onClick)
             .padding(horizontal = 6.dp, vertical = 3.dp),
     ) {
@@ -366,15 +370,16 @@ private fun TimeBlock(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val style = categoryTimelineStyle(event.category)
+    val style = eventTimelineStyle(event)
     val shape = RoundedCornerShape(8.dp)
     Row(
         modifier = modifier
             .clip(shape)
             .background(style.fill, shape)
+            .then(style.outline?.let { Modifier.border(1.5.dp, it, shape) } ?: Modifier)
             .clickable(onClick = onClick),
     ) {
-        // Linker Akzentstreifen — die kräftige Kategorie-Kante (Verlauf bei Wir-Zeit).
+        // Linker Akzentstreifen in Personenfarbe (Verlauf bei Wir-Zeit).
         Box(
             modifier = Modifier
                 .width(3.dp)

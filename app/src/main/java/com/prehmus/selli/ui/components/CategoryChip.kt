@@ -21,10 +21,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.personColor
+import com.prehmus.selli.ui.theme.personSoftColor
 import com.prehmus.selli.ui.theme.selliGradient
 
 /** Deutscher Anzeigename der Kategorie. */
@@ -35,41 +37,55 @@ fun EventCategory.label(): String = when (this) {
 }
 
 /**
- * Getönte Darstellung einer Kategorie im Zeitstrahl — dieselbe Farbsprache wie die
- * Kategorie-Chips ([CategoryChip]), nur als transparent getönte Fläche statt voller
- * Pill. [fill] füllt den Terminblock (weich, durchscheinend), [edge] ist der
- * kräftigere linke Akzentstreifen (Verlauf bei Wir-Zeit) und [content] die
- * Text-/Detailfarbe darauf. Keine zweite Farblogik – nur die vorhandene, getönt.
+ * Darstellung eines Termins im Zeitstrahl. Primär trägt jetzt die **Person** die Farbe
+ * (Grün = Basti, Lila = Melli) — genau wie die Pills in der Monatsansicht, damit Bastis
+ * Outlook- und Mellis Dr.-Plano-Arbeitstermine nicht länger gleich aussehen. Die
+ * **Kategorie** tritt optisch zurück und wird über die Form vermittelt: „Arbeit" bekommt
+ * einen Rahmen ([outline]) in Personenfarbe auf hellem Grund, „Privat" bleibt eine satt
+ * gefüllte Personen-Kachel, „Wir-Zeit" behält bewusst den Lila-Grün-Verlauf (betrifft
+ * ohnehin beide).
+ *
+ * [fill] füllt den Terminblock, [edge] ist der kräftige linke Akzentstreifen, [content]
+ * die Text-/Detailfarbe und [outline] – wenn gesetzt – der Kategorie-Rahmen für Arbeit.
  */
-data class CategoryTimelineStyle(
+data class EventTimelineStyle(
     val fill: Brush,
     val edge: Brush,
     val content: Color,
+    val outline: Color? = null,
 )
 
 @Composable
 @ReadOnlyComposable
-fun categoryTimelineStyle(category: EventCategory): CategoryTimelineStyle = when (category) {
-    EventCategory.TOGETHER -> {
-        // Wir-Zeit: der Lila-Grün-Verlauf, als sanft getönte Fläche.
+fun eventTimelineStyle(event: CalendarEvent): EventTimelineStyle {
+    val content = MaterialTheme.colorScheme.onSurface
+    if (event.category == EventCategory.TOGETHER) {
+        // Wir-Zeit: der Lila-Grün-Verlauf als sanft getönte Fläche, kräftiger Verlaufs-Rand.
         val melli = personColor(Person.MELLI)
         val basti = personColor(Person.BASTI)
-        CategoryTimelineStyle(
+        return EventTimelineStyle(
             fill = Brush.linearGradient(listOf(melli.copy(alpha = 0.22f), basti.copy(alpha = 0.22f))),
             edge = selliGradient(),
-            content = MaterialTheme.colorScheme.onSurface,
+            content = content,
         )
     }
-    EventCategory.WORK -> CategoryTimelineStyle(
-        fill = SolidColor(MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.8f)),
-        edge = SolidColor(MaterialTheme.colorScheme.secondary),
-        content = MaterialTheme.colorScheme.onSecondaryContainer,
-    )
-    EventCategory.PRIVATE -> CategoryTimelineStyle(
-        fill = SolidColor(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f)),
-        edge = SolidColor(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)),
-        content = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+
+    val person = personColor(event.owner)
+    return when (event.category) {
+        // Arbeit: heller Personen-Hauch mit Rahmen → „gerahmt = Arbeit", tritt farblich zurück.
+        EventCategory.WORK -> EventTimelineStyle(
+            fill = SolidColor(person.copy(alpha = 0.10f)),
+            edge = SolidColor(person),
+            content = content,
+            outline = person,
+        )
+        // Privat: satt in Personenfarbe gefüllte Kachel, kein Rahmen.
+        else -> EventTimelineStyle(
+            fill = SolidColor(personSoftColor(event.owner)),
+            edge = SolidColor(person),
+            content = content,
+        )
+    }
 }
 
 /**
