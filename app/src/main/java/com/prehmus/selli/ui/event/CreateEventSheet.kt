@@ -73,11 +73,13 @@ fun CreateEventSheet(
     var location by rememberSaveable { mutableStateOf("") }
     var isAllDay by rememberSaveable { mutableStateOf(false) }
     var invitePartner by rememberSaveable { mutableStateOf(false) }
+    var blocksSharedFreeTime by rememberSaveable { mutableStateOf(true) }
     var category by remember { mutableStateOf(initialCategory ?: EventCategory.PRIVATE) }
-    var day by remember { mutableStateOf(initialDay) }
+    var startDay by remember { mutableStateOf(initialDay) }
+    var endDayInclusive by remember { mutableStateOf(initialDay) }
     var startTime by remember { mutableStateOf(initialStartTime ?: LocalTime.of(18, 0)) }
     var endTime by remember { mutableStateOf(initialEndTime ?: LocalTime.of(19, 0)) }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var datePickerTarget by remember { mutableStateOf<DateTarget?>(null) }
     var timePickerTarget by remember { mutableStateOf<TimeTarget?>(null) }
     // Wiederholung: Google verwaltet die Serie nativ (RRULE) — die App legt keine Einzeltermine an.
     var recurrenceFrequency by rememberSaveable { mutableStateOf<RecurrenceFrequency?>(null) }
@@ -85,8 +87,13 @@ fun CreateEventSheet(
     var showUntilDatePicker by remember { mutableStateOf(false) }
 
     val isRecurrenceValid = recurrenceFrequency == null ||
-        recurrenceUntil == null || !recurrenceUntil!!.isBefore(day)
-    val isValid = title.isNotBlank() && (isAllDay || endTime.isAfter(startTime)) && isRecurrenceValid
+        recurrenceUntil == null || !recurrenceUntil!!.isBefore(startDay)
+    val isDateRangeValid = !isAllDay || !endDayInclusive.isBefore(startDay)
+    val isValid =
+        title.isNotBlank() &&
+            (isAllDay || endTime.isAfter(startTime)) &&
+            isDateRangeValid &&
+            isRecurrenceValid
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -114,17 +121,49 @@ fun CreateEventSheet(
             )
             CategorySelector(selected = category, onSelect = { category = it })
 
-            OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(day.format(DateFormat))
-            }
-
             LabeledSwitch(
                 label = "Ganztägig",
                 checked = isAllDay,
-                onCheckedChange = { isAllDay = it },
+                onCheckedChange = { enabled ->
+                    isAllDay = enabled
+                    if (enabled && endDayInclusive.isBefore(startDay)) {
+                        endDayInclusive = startDay
+                    }
+                },
             )
 
-            if (!isAllDay) {
+            if (isAllDay) {
+                OutlinedButton(
+                    onClick = { datePickerTarget = DateTarget.START },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Von ${startDay.format(DateFormat)}")
+                }
+                OutlinedButton(
+                    onClick = { datePickerTarget = DateTarget.END },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("Bis einschließlich ${endDayInclusive.format(DateFormat)}")
+                }
+                if (!isDateRangeValid) {
+                    Text(
+                        text = "Der Endtag darf nicht vor dem Starttag liegen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+                LabeledSwitch(
+                    label = "Als gemeinsam verplante Zeit werten",
+                    checked = blocksSharedFreeTime,
+                    onCheckedChange = { blocksSharedFreeTime = it },
+                )
+            } else {
+                OutlinedButton(
+                    onClick = { datePickerTarget = DateTarget.START },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(startDay.format(DateFormat))
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(
                         onClick = { timePickerTarget = TimeTarget.START },
@@ -178,19 +217,20 @@ fun CreateEventSheet(
 
             Button(
                 onClick = {
-                    val start = if (isAllDay) day.atStartOfDay() else day.atTime(startTime)
-                    val end = if (isAllDay) day.plusDays(1).atStartOfDay() else day.atTime(endTime)
                     onSave(
-                        NewCalendarEvent(
-                            title = title.trim(),
-                            start = start,
-                            end = end,
+                        buildNewCalendarEvent(
+                            title = title,
+                            startDay = startDay,
+                            endDayInclusive = endDayInclusive,
                             isAllDay = isAllDay,
-                            location = location.trim().ifBlank { null },
+                            startTime = startTime,
+                            endTime = endTime,
+                            location = location,
                             invitePartner = invitePartner,
                             recurrence = recurrenceFrequency?.let {
                                 EventRecurrence(frequency = it, until = recurrenceUntil)
                             },
+                            blocksSharedFreeTime = blocksSharedFreeTime,
                         ),
                         category,
                     )
@@ -220,7 +260,7 @@ fun CreateEventSheet(
 
     if (showUntilDatePicker) {
         val untilPickerState = rememberDatePickerState(
-            initialSelectedDateMillis = (recurrenceUntil ?: day)
+            initialSelectedDateMillis = (recurrenceUntil ?: startDay)
                 .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
         )
         DatePickerDialog(
@@ -241,22 +281,34 @@ fun CreateEventSheet(
         }
     }
 
-    if (showDatePicker) {
+    datePickerTarget?.let { target ->
+        val initialDayForTarget =
+            if (target == DateTarget.START) startDay else endDayInclusive
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = day.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+            initialSelectedDateMillis = initialDayForTarget
+                .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
         )
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = { datePickerTarget = null },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        day = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        val selected = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        when (target) {
+                            DateTarget.START -> {
+                                startDay = selected
+                                if (endDayInclusive.isBefore(selected)) {
+                                    endDayInclusive = selected
+                                }
+                            }
+                            DateTarget.END -> endDayInclusive = selected
+                        }
                     }
-                    showDatePicker = false
+                    datePickerTarget = null
                 }) { Text("OK") }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Abbrechen") }
+                TextButton(onClick = { datePickerTarget = null }) { Text("Abbrechen") }
             },
         ) {
             DatePicker(state = datePickerState)
@@ -296,6 +348,8 @@ fun CreateEventSheet(
         )
     }
 }
+
+private enum class DateTarget { START, END }
 
 private enum class TimeTarget { START, END }
 
