@@ -80,7 +80,6 @@ fun CreateEventSheet(
     var title by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
     var isAllDay by rememberSaveable { mutableStateOf(false) }
-    var invitePartner by rememberSaveable { mutableStateOf(false) }
     var blocksSharedFreeTime by rememberSaveable { mutableStateOf(true) }
     var category by remember { mutableStateOf(initialCategory ?: EventCategory.PRIVATE) }
     var startDay by rememberSaveable(stateSaver = LocalDateSaver) {
@@ -223,12 +222,6 @@ fun CreateEventSheet(
                 )
             }
 
-            LabeledSwitch(
-                label = "Partner einladen — wird ein gemeinsamer Termin",
-                checked = invitePartner,
-                onCheckedChange = { invitePartner = it },
-            )
-
             Button(
                 onClick = {
                     onSave(
@@ -240,7 +233,7 @@ fun CreateEventSheet(
                             startTime = startTime,
                             endTime = endTime,
                             location = location,
-                            invitePartner = invitePartner,
+                            category = category,
                             recurrence = recurrenceFrequency?.let {
                                 EventRecurrence(frequency = it, until = recurrenceUntil)
                             },

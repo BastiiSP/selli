@@ -1,5 +1,6 @@
 package com.prehmus.selli.ui.event
 
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventRecurrence
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import java.time.LocalDate
@@ -17,7 +18,7 @@ internal fun buildNewCalendarEvent(
     startTime: LocalTime,
     endTime: LocalTime,
     location: String?,
-    invitePartner: Boolean,
+    category: EventCategory,
     recurrence: EventRecurrence?,
     blocksSharedFreeTime: Boolean,
 ): NewCalendarEvent {
@@ -45,7 +46,7 @@ internal fun buildNewCalendarEvent(
         end = end,
         isAllDay = isAllDay,
         location = location?.trim()?.ifBlank { null },
-        invitePartner = invitePartner,
+        invitePartner = category == EventCategory.TOGETHER,
         recurrence = recurrence,
         blocksSharedFreeTime = isAllDay && blocksSharedFreeTime,
     )

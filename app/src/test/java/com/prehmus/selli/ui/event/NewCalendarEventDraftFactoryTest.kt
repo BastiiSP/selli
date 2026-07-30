@@ -1,5 +1,6 @@
 package com.prehmus.selli.ui.event
 
+import com.prehmus.selli.domain.model.EventCategory
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -20,7 +21,7 @@ class NewCalendarEventDraftFactoryTest {
             startTime = LocalTime.of(18, 0),
             endTime = LocalTime.of(19, 0),
             location = " Ostsee ",
-            invitePartner = true,
+            category = EventCategory.TOGETHER,
             recurrence = null,
             blocksSharedFreeTime = true,
         )
@@ -31,6 +32,7 @@ class NewCalendarEventDraftFactoryTest {
         assertEquals(LocalDateTime.of(2026, 8, 8, 0, 0), event.end)
         assertTrue(event.isAllDay)
         assertTrue(event.blocksSharedFreeTime)
+        assertTrue(event.invitePartner)
     }
 
     @Test
@@ -44,7 +46,7 @@ class NewCalendarEventDraftFactoryTest {
                 startTime = LocalTime.NOON,
                 endTime = LocalTime.of(13, 0),
                 location = null,
-                invitePartner = false,
+                category = EventCategory.PRIVATE,
                 recurrence = null,
                 blocksSharedFreeTime = false,
             )
@@ -63,7 +65,7 @@ class NewCalendarEventDraftFactoryTest {
             startTime = LocalTime.of(18, 0),
             endTime = LocalTime.of(20, 30),
             location = "  ",
-            invitePartner = false,
+            category = EventCategory.WORK,
             recurrence = null,
             blocksSharedFreeTime = true,
         )
@@ -72,6 +74,27 @@ class NewCalendarEventDraftFactoryTest {
         assertEquals(day.atTime(20, 30), event.end)
         assertFalse(event.isAllDay)
         assertFalse(event.blocksSharedFreeTime)
+        assertFalse(event.invitePartner)
         assertEquals(null, event.location)
+    }
+
+    @Test
+    fun `private event does not invite partner`() {
+        val day = LocalDate.of(2026, 8, 3)
+
+        val event = buildNewCalendarEvent(
+            title = "Sport",
+            startDay = day,
+            endDayInclusive = day,
+            isAllDay = false,
+            startTime = LocalTime.of(18, 0),
+            endTime = LocalTime.of(19, 0),
+            location = null,
+            category = EventCategory.PRIVATE,
+            recurrence = null,
+            blocksSharedFreeTime = false,
+        )
+
+        assertFalse(event.invitePartner)
     }
 }
