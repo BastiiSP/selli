@@ -51,6 +51,7 @@ class EventCustomizationCodec(
             location = overrides.location,
             description = overrides.description,
             category = overrides.category?.name,
+            blocksSharedFreeTime = overrides.blocksSharedFreeTime,
             label = label,
         )
     }
@@ -84,6 +85,7 @@ class EventCustomizationCodec(
                 location = location,
                 description = description,
                 category = category?.let { value -> EventCategory.valueOf(value) },
+                blocksSharedFreeTime = blocksSharedFreeTime,
             ),
             label = label,
         )
@@ -108,6 +110,7 @@ class EventCustomizationCodec(
         val location: String?,
         val description: String?,
         val category: String?,
+        val blocksSharedFreeTime: Boolean?,
         val label: String,
     )
 

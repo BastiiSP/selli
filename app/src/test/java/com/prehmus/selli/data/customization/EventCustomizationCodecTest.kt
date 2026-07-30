@@ -10,6 +10,7 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class EventCustomizationCodecTest {
@@ -31,6 +32,7 @@ class EventCustomizationCodecTest {
                     location = "Berlin\nHbf",
                     description = "Platform 7",
                     category = EventCategory.TOGETHER,
+                    blocksSharedFreeTime = true,
                 ),
                 label = "Original title",
             ),
@@ -41,6 +43,7 @@ class EventCustomizationCodecTest {
                     fromStart = LocalDateTime.of(2026, 7, 21, 9, 0),
                 ),
                 hidden = true,
+                overrides = EventFieldOverrides(blocksSharedFreeTime = false),
                 label = "Standup",
             ),
         )
@@ -51,5 +54,27 @@ class EventCustomizationCodecTest {
     @Test
     fun `round trips empty list`() {
         assertEquals(emptyList<EventCustomization>(), codec.decode(codec.encode(emptyList())))
+    }
+
+    @Test
+    fun `decodes version one customization without free-time field as unspecified`() {
+        val legacyJson = """
+            {
+              "version": 1,
+              "customizations": [
+                {
+                  "targetType": "occurrence",
+                  "source": "GOOGLE_OWN",
+                  "eventId": "legacy-event",
+                  "hidden": false,
+                  "label": "Alter Termin"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val customization = codec.decode(legacyJson).single()
+
+        assertNull(customization.overrides.blocksSharedFreeTime)
     }
 }

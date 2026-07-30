@@ -15,6 +15,8 @@ data class EventFieldOverrides(
     val location: String? = null,
     val description: String? = null,
     val category: EventCategory? = null,
+    /** null = Sellis Standard für die Terminart verwenden. */
+    val blocksSharedFreeTime: Boolean? = null,
 ) {
     fun isEmpty(): Boolean =
         title == null &&
@@ -23,7 +25,8 @@ data class EventFieldOverrides(
             endTime == null &&
             location == null &&
             description == null &&
-            category == null
+            category == null &&
+            blocksSharedFreeTime == null
 }
 
 sealed interface CustomizationTarget {

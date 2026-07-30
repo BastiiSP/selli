@@ -43,6 +43,12 @@ data class CalendarEvent(
      * kein "Angepasst"-Badge (die Kategorie-Pill sagt das schon), bleibt aber zurücksetzbar.
      */
     val hasAnyCustomization: Boolean = false,
+    /**
+     * Wirksame Selli-Festlegung für die gemeinsame Frei-Zeit-Berechnung.
+     * Quellen liefern für Ganztagstermine standardmäßig false; lokale Anpassungen können
+     * den Wert beim Merge überschreiben. Für getimte Termine bleibt der Wert true.
+     */
+    val blocksSharedFreeTime: Boolean = !isAllDay,
 )
 
 data class NewCalendarEvent(
@@ -54,6 +60,8 @@ data class NewCalendarEvent(
     val description: String? = null,
     val invitePartner: Boolean = false,
     val recurrence: EventRecurrence? = null,
+    /** Rein lokale Selli-Festlegung; wird nicht an Google übertragen. */
+    val blocksSharedFreeTime: Boolean = isAllDay,
 )
 
 enum class EventCategory { WORK, PRIVATE, TOGETHER }

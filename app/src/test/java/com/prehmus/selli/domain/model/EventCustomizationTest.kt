@@ -19,4 +19,9 @@ class EventCustomizationTest {
     fun `field overrides are not empty when only category is set`() {
         assertFalse(EventFieldOverrides(category = EventCategory.TOGETHER).isEmpty())
     }
+
+    @Test
+    fun `field overrides are not empty when all-day event explicitly does not block free time`() {
+        assertFalse(EventFieldOverrides(blocksSharedFreeTime = false).isEmpty())
+    }
 }
