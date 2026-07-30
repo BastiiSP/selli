@@ -363,9 +363,12 @@ class CalendarViewModel(
                 endTime = overrides.endTime ?: existingOverrides.endTime,
                 location = overrides.location ?: existingOverrides.location,
                 description = overrides.description ?: existingOverrides.description,
-                category = overrides.category ?: existingOverrides.category,
+                category = overrides.category
+                    ?: existingOverrides.category
+                    ?: event.category.takeIf { event.hasAnyCustomization },
                 blocksSharedFreeTime = overrides.blocksSharedFreeTime
-                    ?: existingOverrides.blocksSharedFreeTime,
+                    ?: existingOverrides.blocksSharedFreeTime
+                    ?: event.blocksSharedFreeTime.takeIf { event.isAllDay },
             )
             applyCustomization(
                 EventCustomization(

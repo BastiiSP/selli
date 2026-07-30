@@ -170,6 +170,43 @@ class CalendarViewModelTest {
             )
         }
 
+    @Test
+    fun `editing one occurrence preserves free-time and category inherited from series`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val event = importedAllDay(blocksSharedFreeTime = true).copy(
+                seriesId = "imported-series",
+                category = EventCategory.WORK,
+                hasAnyCustomization = true,
+            )
+            val fixture = fixture(
+                initialCustomizations = listOf(
+                    EventCustomization(
+                        target = CustomizationTarget.SeriesFrom(
+                            source = event.source,
+                            seriesId = "imported-series",
+                            fromStart = event.start.minusDays(7),
+                        ),
+                        hidden = false,
+                        overrides = EventFieldOverrides(
+                            category = EventCategory.WORK,
+                            blocksSharedFreeTime = true,
+                        ),
+                        label = "Serienanpassung",
+                    ),
+                ),
+            )
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.beginEditingSelectedEvent(wholeSeries = false)
+            fixture.viewModel.saveEventOverrides(EventFieldOverrides(title = "Einzeltag geändert"))
+            advanceUntilIdle()
+
+            val occurrence = fixture.customizationRepository.customizations
+                .single { it.target is CustomizationTarget.Occurrence }
+            assertEquals(EventCategory.WORK, occurrence.overrides.category)
+            assertEquals(true, occurrence.overrides.blocksSharedFreeTime)
+        }
+
     private fun fixture(
         initialCustomizations: List<EventCustomization> = emptyList(),
     ): Fixture {
