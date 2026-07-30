@@ -5,8 +5,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -66,7 +69,7 @@ fun EditEventSheet(
     var day by remember { mutableStateOf(event.start.toLocalDate()) }
     var startTime by remember { mutableStateOf(event.start.toLocalTime()) }
     var endTime by remember { mutableStateOf(event.end.toLocalTime()) }
-    var blocksSharedFreeTime by remember(event.id, event.blocksSharedFreeTime) {
+    var blocksSharedFreeTime by rememberSaveable(event.id, event.blocksSharedFreeTime) {
         mutableStateOf(event.blocksSharedFreeTime)
     }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -78,6 +81,8 @@ fun EditEventSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 20.dp),

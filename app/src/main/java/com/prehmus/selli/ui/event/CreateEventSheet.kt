@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DatePicker
@@ -29,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -52,6 +56,10 @@ import java.util.Locale
 
 private val DateFormat = DateTimeFormatter.ofPattern("EEE, d. MMMM yyyy", Locale.GERMAN)
 private val TimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
+private val LocalDateSaver = Saver<LocalDate, Long>(
+    save = { date -> date.toEpochDay() },
+    restore = { epochDay -> LocalDate.ofEpochDay(epochDay) },
+)
 
 /**
  * Bottom Sheet zum Anlegen eines neuen Termins. Die Speicherung übernimmt die
@@ -75,8 +83,12 @@ fun CreateEventSheet(
     var invitePartner by rememberSaveable { mutableStateOf(false) }
     var blocksSharedFreeTime by rememberSaveable { mutableStateOf(true) }
     var category by remember { mutableStateOf(initialCategory ?: EventCategory.PRIVATE) }
-    var startDay by remember { mutableStateOf(initialDay) }
-    var endDayInclusive by remember { mutableStateOf(initialDay) }
+    var startDay by rememberSaveable(stateSaver = LocalDateSaver) {
+        mutableStateOf(initialDay)
+    }
+    var endDayInclusive by rememberSaveable(stateSaver = LocalDateSaver) {
+        mutableStateOf(initialDay)
+    }
     var startTime by remember { mutableStateOf(initialStartTime ?: LocalTime.of(18, 0)) }
     var endTime by remember { mutableStateOf(initialEndTime ?: LocalTime.of(19, 0)) }
     var datePickerTarget by remember { mutableStateOf<DateTarget?>(null) }
@@ -99,6 +111,8 @@ fun CreateEventSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
                 .padding(bottom = 20.dp),
