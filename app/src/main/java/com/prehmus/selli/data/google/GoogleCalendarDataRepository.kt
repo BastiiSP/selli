@@ -219,6 +219,26 @@ class GoogleCalendarDataRepository(
             }
         }
 
+    override suspend fun setPartnerAttendance(
+        event: CalendarEvent,
+        shared: Boolean,
+        wholeSeries: Boolean,
+    ): Result<Unit> =
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            runGoogleApiCatching {
+                val ownAccount = requireStoredAccount(OWN_PREFIX)
+                val partnerAccount = requireStoredAccount(PARTNER_PREFIX)
+                GoogleCalendarEventSharing(calendar(ownAccount.email))
+                    .setPartnerAttendance(
+                        event = event,
+                        partnerEmail = partnerAccount.email,
+                        shared = shared,
+                        wholeSeries = wholeSeries,
+                    )
+                    .getOrThrow()
+            }
+        }
+
     override suspend fun sessionState(): SessionState =
         sessionState(
             ownAccount = storedAccount(OWN_PREFIX),

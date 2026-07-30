@@ -7,6 +7,15 @@ import com.prehmus.selli.domain.model.NewCalendarEvent
 interface CalendarRepository {
     suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent>
 
+    suspend fun setPartnerAttendance(
+        event: CalendarEvent,
+        shared: Boolean,
+        wholeSeries: Boolean,
+    ): Result<Unit> =
+        Result.failure(
+            UnsupportedOperationException("Wir-Zeit-Synchronisation wird für diese Quelle nicht unterstützt."),
+        )
+
     suspend fun deleteEvent(event: CalendarEvent, scope: DeletionScope): Result<Unit> =
         Result.failure(UnsupportedOperationException("Löschen wird für diese Quelle nicht unterstützt."))
 }
