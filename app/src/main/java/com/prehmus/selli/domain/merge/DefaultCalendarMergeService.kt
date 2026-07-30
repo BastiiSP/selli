@@ -156,7 +156,9 @@ class DefaultCalendarMergeService(
                 overrides.location != null ||
                 overrides.description != null
         val hasCategoryOverride = overrides.category != null
-        val hasApplicableOverride = hasFieldOverride || hasCategoryOverride
+        val hasFreeTimeOverride = overrides.blocksSharedFreeTime != null
+        val hasApplicableOverride =
+            hasFieldOverride || hasCategoryOverride || hasFreeTimeOverride
 
         val newStart: LocalDateTime
         val newEnd: LocalDateTime
@@ -194,13 +196,14 @@ class DefaultCalendarMergeService(
             category = category,
             isCustomized = hasFieldOverride,
             hasAnyCustomization = hasApplicableOverride,
+            blocksSharedFreeTime = overrides.blocksSharedFreeTime ?: blocksSharedFreeTime,
         )
     }
 
     /**
      * Liefert alle mindestens drei Stunden langen Blöcke im gemeinsamen Tagesfenster.
-     * Ganztägige Events blockieren bewusst nicht, weil sie in den verbundenen Kalendern häufig
-     * Marker wie Geburtstage oder Urlaub sind.
+     * Ganztägige Events blockieren nur mit expliziter lokaler Festlegung, weil sie in den
+     * verbundenen Kalendern häufig reine Marker wie Geburtstage sind.
      */
     override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> {
         val window = TimeInterval(
@@ -209,7 +212,7 @@ class DefaultCalendarMergeService(
         )
         val blockedIntervals = mergedEvents(DateRange(start = day, endInclusive = day))
             .asSequence()
-            .filterNot { event -> event.isAllDay }
+            .filter { event -> !event.isAllDay || event.blocksSharedFreeTime }
             .mapNotNull { event -> event.blockedIntervalIn(window) }
             .sortedBy { interval -> interval.start }
             .toList()

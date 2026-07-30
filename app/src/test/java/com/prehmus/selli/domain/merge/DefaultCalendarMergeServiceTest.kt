@@ -649,6 +649,31 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_appliesFreeTimeOverrideWithoutShowingFieldCustomizationBadge() = runTest {
+        val original = event(
+            id = "all-day",
+            start = testDay.atStartOfDay(),
+            end = testDay.plusDays(1).atStartOfDay(),
+            isAllDay = true,
+        )
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(blocksSharedFreeTime = true),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+
+        assertTrue(customized.blocksSharedFreeTime)
+        assertFalse(customized.isCustomized)
+        assertTrue(customized.hasAnyCustomization)
+    }
+
+    @Test
     fun freeBlocks_returnsEveryQualifyingGapInStartOrder() = runTest {
         val service = service(
             googleEvents = listOf(
@@ -683,6 +708,71 @@ class DefaultCalendarMergeServiceTest {
             listOf(FreeTimeBlock(testDay.atTime(9, 0), testDay.atTime(22, 0))),
             service.freeBlocks(testDay),
         )
+    }
+
+    @Test
+    fun freeBlocks_ignoresExplicitlyNonBlockingAllDayEvent() = runTest {
+        val allDay = event(
+            id = "birthday",
+            start = testDay.atStartOfDay(),
+            end = testDay.plusDays(1).atStartOfDay(),
+            isAllDay = true,
+        )
+        val service = service(
+            googleEvents = listOf(allDay),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(allDay.source, allDay.id)),
+                    overrides = EventFieldOverrides(blocksSharedFreeTime = false),
+                ),
+            ),
+        )
+
+        assertEquals(
+            listOf(FreeTimeBlock(testDay.atTime(9, 0), testDay.atTime(22, 0))),
+            service.freeBlocks(testDay),
+        )
+    }
+
+    @Test
+    fun freeBlocks_blockingMultiDayAllDayEventBlocksMiddleDay() = runTest {
+        val trip = event(
+            id = "trip",
+            start = testDay.minusDays(1).atStartOfDay(),
+            end = testDay.plusDays(2).atStartOfDay(),
+            isAllDay = true,
+        )
+        val service = service(
+            googleEvents = listOf(trip),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(trip.source, trip.id)),
+                    overrides = EventFieldOverrides(blocksSharedFreeTime = true),
+                ),
+            ),
+        )
+
+        assertTrue(service.freeBlocks(testDay).isEmpty())
+    }
+
+    @Test
+    fun freeBlocks_timedEventStillBlocksWhenFreeTimeOverrideIsFalse() = runTest {
+        val timed = event(
+            id = "timed",
+            start = testDay.atTime(9, 0),
+            end = testDay.atTime(22, 0),
+        )
+        val service = service(
+            googleEvents = listOf(timed),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(timed.source, timed.id)),
+                    overrides = EventFieldOverrides(blocksSharedFreeTime = false),
+                ),
+            ),
+        )
+
+        assertTrue(service.freeBlocks(testDay).isEmpty())
     }
 
     @Test
