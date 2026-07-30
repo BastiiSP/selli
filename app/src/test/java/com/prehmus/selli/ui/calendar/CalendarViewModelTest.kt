@@ -34,6 +34,77 @@ class CalendarViewModelTest {
     val mainDispatcherRule = MainDispatcherRule()
 
     @Test
+    fun `changing own event to Wir-Zeit shares in Google before saving category`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture()
+            val event = ownEvent(category = EventCategory.PRIVATE, isShared = false)
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.setSelectedEventCategory(EventCategory.TOGETHER, wholeSeries = false)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(SharingCall(event, shared = true, wholeSeries = false)),
+                fixture.calendarRepository.sharingCalls,
+            )
+            assertEquals(
+                EventCategory.TOGETHER,
+                fixture.customizationRepository.customizations.single().overrides.category,
+            )
+        }
+
+    @Test
+    fun `changing Wir-Zeit to private removes partner in Google`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture()
+            val event = ownEvent(category = EventCategory.TOGETHER, isShared = true)
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.setSelectedEventCategory(EventCategory.PRIVATE, wholeSeries = true)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(SharingCall(event, shared = false, wholeSeries = true)),
+                fixture.calendarRepository.sharingCalls,
+            )
+            assertEquals(
+                EventCategory.PRIVATE,
+                fixture.customizationRepository.customizations.single().overrides.category,
+            )
+        }
+
+    @Test
+    fun `failed Google sharing does not save local Wir-Zeit category`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture(sharingResult = Result.failure(IllegalStateException("Google nicht erreichbar")))
+            val event = ownEvent(category = EventCategory.PRIVATE, isShared = false)
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.setSelectedEventCategory(EventCategory.TOGETHER, wholeSeries = false)
+            advanceUntilIdle()
+
+            assertTrue(fixture.customizationRepository.customizations.isEmpty())
+            assertEquals("Google nicht erreichbar", fixture.viewModel.uiState.value.userMessage)
+        }
+
+    @Test
+    fun `changing private to work remains local`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture()
+            val event = ownEvent(category = EventCategory.PRIVATE, isShared = false)
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.setSelectedEventCategory(EventCategory.WORK, wholeSeries = false)
+            advanceUntilIdle()
+
+            assertTrue(fixture.calendarRepository.sharingCalls.isEmpty())
+            assertEquals(
+                EventCategory.WORK,
+                fixture.customizationRepository.customizations.single().overrides.category,
+            )
+        }
+
+    @Test
     fun `creating blocking all-day event persists explicit local preference`() =
         runTest(mainDispatcherRule.dispatcher) {
             val fixture = fixture()
@@ -209,8 +280,9 @@ class CalendarViewModelTest {
 
     private fun fixture(
         initialCustomizations: List<EventCustomization> = emptyList(),
+        sharingResult: Result<Unit> = Result.success(Unit),
     ): Fixture {
-        val calendarRepository = RecordingCalendarRepository()
+        val calendarRepository = RecordingCalendarRepository(sharingResult)
         val customizationRepository = InMemoryCustomizationRepository(initialCustomizations)
         return Fixture(
             viewModel = CalendarViewModel(
@@ -245,6 +317,22 @@ class CalendarViewModelTest {
             blocksSharedFreeTime = blocksSharedFreeTime,
         )
 
+    private fun ownEvent(
+        category: EventCategory,
+        isShared: Boolean,
+    ): CalendarEvent =
+        CalendarEvent(
+            id = "own-event",
+            title = "Eigener Termin",
+            start = CREATED_START,
+            end = CREATED_START.plusHours(1),
+            isAllDay = false,
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.BASTI,
+            isSharedEvent = isShared,
+            category = category,
+        )
+
     private data class Fixture(
         val viewModel: CalendarViewModel,
         val calendarRepository: RecordingCalendarRepository,
@@ -257,9 +345,18 @@ class CalendarViewModelTest {
         override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> = emptyList()
     }
 
-    private class RecordingCalendarRepository : CalendarRepository {
+    private data class SharingCall(
+        val event: CalendarEvent,
+        val shared: Boolean,
+        val wholeSeries: Boolean,
+    )
+
+    private class RecordingCalendarRepository(
+        private val sharingResult: Result<Unit>,
+    ) : CalendarRepository {
         val createCalls = mutableListOf<NewCalendarEvent>()
         val deleteCalls = mutableListOf<Pair<CalendarEvent, DeletionScope>>()
+        val sharingCalls = mutableListOf<SharingCall>()
 
         override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> {
             createCalls += event
@@ -283,6 +380,15 @@ class CalendarViewModelTest {
         ): Result<Unit> {
             deleteCalls += event to scope
             return Result.success(Unit)
+        }
+
+        override suspend fun setPartnerAttendance(
+            event: CalendarEvent,
+            shared: Boolean,
+            wholeSeries: Boolean,
+        ): Result<Unit> {
+            sharingCalls += SharingCall(event, shared, wholeSeries)
+            return sharingResult
         }
     }
 

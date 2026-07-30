@@ -43,9 +43,9 @@ private val ActionsTimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERM
 
 /**
  * Aktionen-Sheet für einen angetippten Termin: lokal ausblenden oder anpassen.
- * Beides gilt nur für Sellis eigene Ansicht — der echte Google-Termin wird nie
- * verändert. Bei Serien-Vorkommen wird vorher der Geltungsbereich erfragt
- * ("nur dieses Vorkommen" vs. "dieses und alle folgenden").
+ * Arbeit/Privat bleiben lokale Kategorien; „Wir-Zeit" synchronisiert bei eigenen
+ * Terminen den Partner als Google-Teilnehmer. Bei Serien-Vorkommen wird vorher der
+ * Geltungsbereich erfragt.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,6 +65,11 @@ fun EventActionsSheet(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     // Nur eigene Google-Termine lassen sich echt löschen; sonst bleibt nur lokales Ausblenden.
     val canDelete = event.source == CalendarSource.GOOGLE_OWN
+    val enabledCategories = when {
+        event.source == CalendarSource.GOOGLE_OWN -> EventCategory.entries.toSet()
+        event.category == EventCategory.TOGETHER -> setOf(EventCategory.TOGETHER)
+        else -> setOf(EventCategory.WORK, EventCategory.PRIVATE)
+    }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -115,6 +120,7 @@ fun EventActionsSheet(
             )
             CategorySelector(
                 selected = event.category,
+                enabledCategories = enabledCategories,
                 onSelect = { category ->
                     if (category != event.category) {
                         if (event.seriesId == null) {
@@ -127,7 +133,11 @@ fun EventActionsSheet(
             )
 
             Text(
-                text = "Änderungen gelten nur in Selli — der echte Kalender bleibt unverändert.",
+                text = if (event.source == CalendarSource.GOOGLE_OWN) {
+                    "Wir-Zeit erscheint in beiden Google-Kalendern. Arbeit und Privat sind lokale Kategorien."
+                } else {
+                    "Dieser Kalender ist schreibgeschützt; Wir-Zeit lässt sich nur bei eigenen Terminen ändern."
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -261,14 +271,24 @@ fun EventActionsSheet(
     }
 
     pendingCategory?.let { category ->
+        val changesGoogleSharing =
+            event.source == CalendarSource.GOOGLE_OWN &&
+                event.isSharedEvent != (category == EventCategory.TOGETHER)
         AlertDialog(
             onDismissRequest = { pendingCategory = null },
-            title = { Text("Kategorie für die Serie") },
+            title = {
+                Text(if (changesGoogleSharing) "Wir-Zeit für die Serie" else "Kategorie für die Serie")
+            },
             text = {
                 Text(
-                    "Dieser Termin gehört zu einer Serie. Soll diese Kategorie nur für " +
-                        "dieses Vorkommen gelten oder für dieses und alle folgenden? " +
-                        "Vergangene Vorkommen bleiben unberührt.",
+                    if (changesGoogleSharing) {
+                        "Google kann Teilnehmer für ein einzelnes Vorkommen oder die gesamte " +
+                            "Serie ändern. Welche Termine sollen in beiden Kalendern erscheinen?"
+                    } else {
+                        "Dieser Termin gehört zu einer Serie. Soll diese Kategorie nur für " +
+                            "dieses Vorkommen gelten oder für dieses und alle folgenden? " +
+                            "Vergangene Vorkommen bleiben unberührt."
+                    },
                 )
             },
             confirmButton = {
@@ -280,7 +300,9 @@ fun EventActionsSheet(
                     TextButton(onClick = {
                         pendingCategory = null
                         onSetCategory(category, true)
-                    }) { Text("Dieses und alle folgenden") }
+                    }) {
+                        Text(if (changesGoogleSharing) "Gesamte Serie" else "Dieses und alle folgenden")
+                    }
                     TextButton(
                         onClick = { pendingCategory = null },
                         modifier = Modifier.padding(top = 8.dp),

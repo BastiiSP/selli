@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.prehmus.selli.data.google.GoogleRecoverableAuthException
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.model.CalendarEvent
+import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
@@ -283,30 +284,88 @@ class CalendarViewModel(
     }
 
     /**
-     * Setzt die Kategorie des ausgewählten Termins lokal — nur dieses Vorkommen oder
-     * die Serie ab hier. Bereits vorhandene Feld-Anpassungen desselben Ziels bleiben
-     * erhalten (die Kategorie wird nur ergänzt/überschrieben).
+     * „Wir-Zeit" ist mehr als eine lokale Kategorie: Eigene Google-Termine werden dabei
+     * mit dem Partner geteilt beziehungsweise wieder entteilt. Erst nach erfolgreicher
+     * Google-Aktualisierung wird die lokale Kategorie gespeichert.
      */
     fun setSelectedEventCategory(category: EventCategory, wholeSeries: Boolean) {
         val event = _uiState.value.selectedEvent ?: return
         _uiState.update { it.copy(selectedEvent = null) }
-        val target = event.customizationTarget(wholeSeries)
+        val shouldBeShared = category == EventCategory.TOGETHER
+        val requiresGoogleUpdate = event.isSharedEvent != shouldBeShared
+
+        if (requiresGoogleUpdate && event.source != CalendarSource.GOOGLE_OWN) {
+            _uiState.update {
+                it.copy(userMessage = "Nur eigene Google-Termine können als Wir-Zeit geändert werden.")
+            }
+            return
+        }
+
         viewModelScope.launch {
-            val existing = runCatching { customizationRepository.all() }
-                .getOrDefault(emptyList())
-                .firstOrNull { it.target == target }
-            val mergedOverrides = (existing?.overrides ?: EventFieldOverrides())
-                .copy(category = category)
-            applyCustomization(
-                EventCustomization(
-                    target = target,
-                    hidden = existing?.hidden ?: false,
-                    overrides = mergedOverrides,
-                    label = existing?.label?.ifBlank { event.title } ?: event.title,
-                ),
-                successMessage = "Kategorie nur in Selli gesetzt — dein Google-Kalender bleibt unverändert.",
+            if (requiresGoogleUpdate) {
+                val sharingResult = calendarRepository.setPartnerAttendance(
+                    event = event,
+                    shared = shouldBeShared,
+                    wholeSeries = wholeSeries,
+                )
+                if (sharingResult.isFailure) {
+                    val error = sharingResult.exceptionOrNull()
+                    _uiState.update {
+                        it.copy(
+                            userMessage = error?.message
+                                ?: "Wir-Zeit konnte nicht mit Google synchronisiert werden.",
+                        )
+                    }
+                    return@launch
+                }
+            }
+
+            saveEventCategory(
+                event = event,
+                category = category,
+                wholeSeries = wholeSeries,
+                successMessage = if (requiresGoogleUpdate) {
+                    if (shouldBeShared) {
+                        "Wir-Zeit gespeichert — der Termin ist jetzt in beiden Kalendern."
+                    } else {
+                        "Wir-Zeit beendet — der Termin wurde aus dem Partnerkalender entfernt."
+                    }
+                } else {
+                    "Kategorie in Selli gespeichert."
+                },
+                forceNetworkRefresh = requiresGoogleUpdate,
             )
         }
+    }
+
+    private suspend fun saveEventCategory(
+        event: CalendarEvent,
+        category: EventCategory,
+        wholeSeries: Boolean,
+        successMessage: String,
+        forceNetworkRefresh: Boolean,
+    ) {
+        val target = event.customizationTarget(wholeSeries)
+        val existing = runCatching { customizationRepository.all() }
+            .getOrDefault(emptyList())
+            .firstOrNull { it.target == target }
+        val customization = EventCustomization(
+            target = target,
+            hidden = existing?.hidden ?: false,
+            overrides = (existing?.overrides ?: EventFieldOverrides()).copy(category = category),
+            label = existing?.label?.ifBlank { event.title } ?: event.title,
+        )
+
+        runCatching { customizationRepository.save(customization) }
+            .onSuccess {
+                _uiState.update { it.copy(userMessage = successMessage) }
+                refresh(forceNetwork = forceNetworkRefresh)
+            }
+            .onFailure { error ->
+                _uiState.update {
+                    it.copy(userMessage = error.message ?: "Speichern der Kategorie fehlgeschlagen.")
+                }
+            }
     }
 
     /**

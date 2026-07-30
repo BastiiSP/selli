@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -140,6 +141,7 @@ fun CategorySelector(
     selected: EventCategory,
     onSelect: (EventCategory) -> Unit,
     modifier: Modifier = Modifier,
+    enabledCategories: Set<EventCategory> = EventCategory.entries.toSet(),
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
@@ -150,6 +152,7 @@ fun CategorySelector(
                 category = category,
                 selected = category == selected,
                 onClick = { onSelect(category) },
+                enabled = category in enabledCategories,
                 modifier = Modifier.weight(1f),
             )
         }
@@ -161,6 +164,7 @@ private fun CategoryOption(
     category: EventCategory,
     selected: Boolean,
     onClick: () -> Unit,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val shape = CircleShape
@@ -179,8 +183,9 @@ private fun CategoryOption(
     }
     Box(
         modifier = modifier
+            .alpha(if (enabled) 1f else 0.45f)
             .clip(shape)
-            .clickable(onClick = onClick)
+            .clickable(enabled = enabled, onClick = onClick)
             .then(fill)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
