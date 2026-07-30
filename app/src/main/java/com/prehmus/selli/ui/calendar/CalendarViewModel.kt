@@ -231,15 +231,20 @@ class CalendarViewModel(
         viewModelScope.launch {
             calendarRepository.createEvent(draft)
                 .onSuccess { created ->
-                    // Kategorie ist rein lokal: nur ablegen, wenn sie von der automatischen
-                    // Ableitung des neuen Termins abweicht (nichts nach Google zurückschreiben).
-                    applyCategoryToCreatedEvent(created, draft, category)
+                    // Kategorie und Ganztags-Frei-Zeit-Festlegung sind rein lokal und werden
+                    // gemeinsam gespeichert — nichts davon nach Google zurückschreiben.
+                    val localSettingsSaved =
+                        applyLocalSettingsToCreatedEvent(created, draft, category)
                     _uiState.update {
                         it.copy(
                             isSavingEvent = false,
                             isCreateSheetOpen = false,
                             createSheetPrefill = null,
-                            userMessage = "Termin angelegt.",
+                            userMessage = if (localSettingsSaved) {
+                                "Termin angelegt."
+                            } else {
+                                "Termin angelegt, lokale Einstellungen konnten nicht gespeichert werden."
+                            },
                         )
                     }
                     refresh(forceNetwork = true)
@@ -434,28 +439,41 @@ class CalendarViewModel(
     }
 
     /**
-     * Legt für einen frisch erstellten Termin bei Bedarf eine lokale Kategorie-Anpassung ab.
-     * Entspricht die gewünschte Kategorie ohnehin der automatischen Ableitung (eingeladener
-     * Partner → Wir-Zeit, sonst Privat), wird nichts gespeichert.
+     * Legt für einen frisch erstellten Termin genau eine kombinierte lokale Anpassung ab.
+     * Ganztags-Frei-Zeit wird immer explizit gespeichert (auch false); die Kategorie nur dann,
+     * wenn sie von der automatischen Ableitung abweicht.
      */
-    private suspend fun applyCategoryToCreatedEvent(
+    private suspend fun applyLocalSettingsToCreatedEvent(
         created: CalendarEvent,
         draft: NewCalendarEvent,
         category: EventCategory?,
-    ) {
-        if (category == null) return
+    ): Boolean {
         val derived = if (draft.invitePartner) EventCategory.TOGETHER else EventCategory.PRIVATE
-        if (category == derived) return
-        runCatching {
+        val overrides = EventFieldOverrides(
+            category = category?.takeIf { it != derived },
+            blocksSharedFreeTime = draft.blocksSharedFreeTime.takeIf { draft.isAllDay },
+        )
+        if (overrides.isEmpty()) return true
+
+        val target = if (draft.recurrence != null) {
+            CustomizationTarget.SeriesFrom(
+                source = created.source,
+                seriesId = created.id,
+                fromStart = created.start,
+            )
+        } else {
+            CustomizationTarget.Occurrence(created.key())
+        }
+        return runCatching {
             customizationRepository.save(
                 EventCustomization(
-                    target = CustomizationTarget.Occurrence(created.key()),
+                    target = target,
                     hidden = false,
-                    overrides = EventFieldOverrides(category = category),
+                    overrides = overrides,
                     label = created.title,
                 ),
             )
-        }
+        }.isSuccess
     }
 
     private fun CalendarEvent.key() = EventKey(source = source, eventId = id)
