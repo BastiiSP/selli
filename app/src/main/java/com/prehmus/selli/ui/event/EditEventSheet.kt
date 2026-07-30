@@ -66,6 +66,9 @@ fun EditEventSheet(
     var day by remember { mutableStateOf(event.start.toLocalDate()) }
     var startTime by remember { mutableStateOf(event.start.toLocalTime()) }
     var endTime by remember { mutableStateOf(event.end.toLocalTime()) }
+    var blocksSharedFreeTime by remember(event.id, event.blocksSharedFreeTime) {
+        mutableStateOf(event.blocksSharedFreeTime)
+    }
     var showDatePicker by remember { mutableStateOf(false) }
     var timePickerTarget by remember { mutableStateOf<EditTimeTarget?>(null) }
 
@@ -126,6 +129,12 @@ fun EditEventSheet(
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
+            } else {
+                LabeledSwitch(
+                    label = "Als gemeinsam verplante Zeit werten",
+                    checked = blocksSharedFreeTime,
+                    onCheckedChange = { blocksSharedFreeTime = it },
+                )
             }
 
             OutlinedTextField(
@@ -154,6 +163,9 @@ fun EditEventSheet(
                             endTime = endTime.takeIf { !event.isAllDay && it != event.end.toLocalTime() },
                             location = location.trim().takeIf { it != event.location.orEmpty() },
                             description = description.trim().takeIf { it != event.description.orEmpty() },
+                            blocksSharedFreeTime = blocksSharedFreeTime.takeIf {
+                                event.isAllDay && it != event.blocksSharedFreeTime
+                            },
                         )
                     )
                 },

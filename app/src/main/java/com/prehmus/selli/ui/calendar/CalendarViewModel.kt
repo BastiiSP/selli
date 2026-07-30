@@ -349,18 +349,30 @@ class CalendarViewModel(
         if (overrides.isEmpty()) return
         val target = event.customizationTarget(wholeSeries)
         viewModelScope.launch {
-            // Eine bereits gesetzte Kategorie beim reinen Feld-Bearbeiten nicht verlieren.
-            val existingCategory = runCatching { customizationRepository.all() }
+            // Unveränderte Felder der bereits wirksamen lokalen Anpassung nicht verlieren.
+            // Das Bearbeiten-Sheet liefert nur Abweichungen zum aktuell angezeigten Event;
+            // ein vollständiges Zurücksetzen ist eine separate Aktion.
+            val existing = runCatching { customizationRepository.all() }
                 .getOrDefault(emptyList())
                 .firstOrNull { it.target == target }
-                ?.overrides
-                ?.category
+            val existingOverrides = existing?.overrides ?: EventFieldOverrides()
+            val mergedOverrides = EventFieldOverrides(
+                title = overrides.title ?: existingOverrides.title,
+                date = overrides.date ?: existingOverrides.date,
+                startTime = overrides.startTime ?: existingOverrides.startTime,
+                endTime = overrides.endTime ?: existingOverrides.endTime,
+                location = overrides.location ?: existingOverrides.location,
+                description = overrides.description ?: existingOverrides.description,
+                category = overrides.category ?: existingOverrides.category,
+                blocksSharedFreeTime = overrides.blocksSharedFreeTime
+                    ?: existingOverrides.blocksSharedFreeTime,
+            )
             applyCustomization(
                 EventCustomization(
                     target = target,
-                    hidden = false,
-                    overrides = overrides.copy(category = overrides.category ?: existingCategory),
-                    label = event.title,
+                    hidden = existing?.hidden ?: false,
+                    overrides = mergedOverrides,
+                    label = existing?.label?.ifBlank { event.title } ?: event.title,
                 ),
                 successMessage = "Nur in Selli angepasst — dein Google-Kalender bleibt unverändert.",
             )

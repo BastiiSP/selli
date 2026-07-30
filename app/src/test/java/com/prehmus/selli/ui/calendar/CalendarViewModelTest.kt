@@ -8,6 +8,8 @@ import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.domain.model.EventFieldOverrides
+import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.EventRecurrence
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
@@ -87,6 +89,87 @@ class CalendarViewModelTest {
             )
         }
 
+    @Test
+    fun `editing imported all-day event stores blocking preference only locally`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture()
+            val event = importedAllDay(blocksSharedFreeTime = false)
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.beginEditingSelectedEvent(wholeSeries = false)
+            fixture.viewModel.saveEventOverrides(
+                EventFieldOverrides(blocksSharedFreeTime = true),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                true,
+                fixture.customizationRepository.customizations
+                    .single()
+                    .overrides
+                    .blocksSharedFreeTime,
+            )
+            assertTrue(fixture.calendarRepository.createCalls.isEmpty())
+            assertTrue(fixture.calendarRepository.deleteCalls.isEmpty())
+        }
+
+    @Test
+    fun `editing fields preserves existing category and explicit false free-time preference`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val event = importedAllDay(blocksSharedFreeTime = false)
+            val target = CustomizationTarget.Occurrence(
+                EventKey(event.source, event.id),
+            )
+            val fixture = fixture(
+                initialCustomizations = listOf(
+                    EventCustomization(
+                        target = target,
+                        hidden = false,
+                        overrides = EventFieldOverrides(
+                            category = EventCategory.WORK,
+                            blocksSharedFreeTime = false,
+                        ),
+                        label = "Bestehende Anpassung",
+                    ),
+                ),
+            )
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.beginEditingSelectedEvent(wholeSeries = false)
+            fixture.viewModel.saveEventOverrides(EventFieldOverrides(title = "Geändert"))
+            advanceUntilIdle()
+
+            val saved = fixture.customizationRepository.customizations.single()
+            assertEquals("Geändert", saved.overrides.title)
+            assertEquals(EventCategory.WORK, saved.overrides.category)
+            assertEquals(false, saved.overrides.blocksSharedFreeTime)
+            assertEquals("Bestehende Anpassung", saved.label)
+            assertTrue(fixture.calendarRepository.createCalls.isEmpty())
+            assertTrue(fixture.calendarRepository.deleteCalls.isEmpty())
+        }
+
+    @Test
+    fun `editing blocking all-day event can persist explicit false preference`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val event = importedAllDay(blocksSharedFreeTime = true)
+            val fixture = fixture()
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.beginEditingSelectedEvent(wholeSeries = false)
+            fixture.viewModel.saveEventOverrides(
+                EventFieldOverrides(blocksSharedFreeTime = false),
+            )
+            advanceUntilIdle()
+
+            assertEquals(
+                false,
+                fixture.customizationRepository.customizations
+                    .single()
+                    .overrides
+                    .blocksSharedFreeTime,
+            )
+        }
+
     private fun fixture(
         initialCustomizations: List<EventCustomization> = emptyList(),
     ): Fixture {
@@ -109,6 +192,19 @@ class CalendarViewModelTest {
             start = CREATED_START,
             end = LocalDateTime.of(2026, 8, 8, 0, 0),
             isAllDay = true,
+            blocksSharedFreeTime = blocksSharedFreeTime,
+        )
+
+    private fun importedAllDay(blocksSharedFreeTime: Boolean): CalendarEvent =
+        CalendarEvent(
+            id = "imported-event",
+            title = "Importiert",
+            start = CREATED_START,
+            end = CREATED_START.plusDays(1),
+            isAllDay = true,
+            source = CalendarSource.GOOGLE_PARTNER,
+            owner = Person.MELLI,
+            isSharedEvent = false,
             blocksSharedFreeTime = blocksSharedFreeTime,
         )
 

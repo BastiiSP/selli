@@ -424,7 +424,7 @@ private fun RecurrencePicker(
 private val UntilFormat = DateTimeFormatter.ofPattern("d.M.yyyy", Locale.GERMAN)
 
 @Composable
-private fun LabeledSwitch(
+internal fun LabeledSwitch(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
