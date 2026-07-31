@@ -128,12 +128,10 @@ private fun WidgetCard(snapshot: WidgetSnapshot?, today: LocalDate) {
 
         Column(
             modifier = GlanceModifier.fillMaxSize(),
-            verticalAlignment =
-                if (widgetTier == WidgetTier.SMALL) {
-                    Alignment.CenterVertically
-                } else {
-                    Alignment.Top
-                },
+            // Immer vertikal zentriert: bleibt der Nutzer größer als der Inhalt braucht (z. B.
+            // beim manuellen Vergrößern über das Nötige hinaus), verteilt sich der übrige
+            // Freiraum oben und unten gleichmäßig statt sich unten anzusammeln.
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             if (snapshot.nextEvent == null) {
                 EmptyHint(
