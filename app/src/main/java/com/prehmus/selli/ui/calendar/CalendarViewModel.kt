@@ -13,6 +13,7 @@ import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
+import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.SourceLoadError
@@ -87,6 +88,9 @@ class CalendarViewModel(
     // Dr.-Plano-ICS-Server) und dass eine veraltete, langsamere Antwort die frische überschreibt.
     private var refreshJob: Job? = null
 
+    // Termin aus einer Benachrichtigung, dessen Tag beim Antippen noch nicht geladen war.
+    private var pendingDeepLink: EventKey? = null
+
     init {
         val today = LocalDate.now()
         _uiState = MutableStateFlow(
@@ -134,6 +138,11 @@ class CalendarViewModel(
                     )
                 }
                 refreshFreeBlocks(_uiState.value.selectedDay)
+                // Wartet ein Benachrichtigungs-Termin auf seinen Tag, ist er jetzt da. Danach in
+                // jedem Fall verwerfen: ein inzwischen gelöschter Termin darf nicht irgendwann
+                // später beim Blättern noch ein Sheet aufreißen.
+                resolvePendingDeepLink()
+                pendingDeepLink = null
             } catch (cancellation: CancellationException) {
                 // Ein neuerer Refresh hat übernommen — dessen Lauf besitzt jetzt isSyncing.
                 throw cancellation
@@ -266,6 +275,41 @@ class CalendarViewModel(
     // --- Lokale Ausblendungen/Anpassungen (ändern nie den echten Google-Kalender) ---
 
     fun selectEvent(event: CalendarEvent) = _uiState.update { it.copy(selectedEvent = event) }
+
+    /**
+     * Einstieg aus einer Wir-Zeit-Benachrichtigung: springt auf [day] und öffnet dort das
+     * Aktionen-Sheet für den Termin mit [key]. Nutzt bewusst nur die bestehenden Mechanismen
+     * (`selectedDay` + `selectedEvent`) statt einer eigenen Navigation.
+     *
+     * Beim App-Kaltstart läuft der erste Refresh noch — der Termin wird dann gemerkt und
+     * aufgelöst, sobald die Termine dieses Tages da sind (siehe [resolvePendingDeepLink]).
+     */
+    fun openDeepLinkedEvent(day: LocalDate, key: EventKey) {
+        pendingDeepLink = key
+        _uiState.update {
+            it.copy(
+                selectedDay = day,
+                visibleMonth = YearMonth.from(day),
+                freeBlocksOnSelectedDay = emptyList(),
+            )
+        }
+        refreshFreeBlocks(day)
+        // Sind die Termine schon geladen, greift das sofort; sonst übernimmt refresh().
+        if (!resolvePendingDeepLink()) refresh()
+    }
+
+    /** @return true, wenn der gemerkte Termin gefunden und geöffnet wurde. */
+    private fun resolvePendingDeepLink(): Boolean {
+        val key = pendingDeepLink ?: return false
+        val state = _uiState.value
+        val event = state.eventsByDay[state.selectedDay]
+            ?.firstOrNull { candidate -> candidate.key() == key }
+            ?: return false
+
+        pendingDeepLink = null
+        _uiState.update { it.copy(selectedEvent = event) }
+        return true
+    }
 
     fun dismissEventActions() = _uiState.update { it.copy(selectedEvent = null) }
 

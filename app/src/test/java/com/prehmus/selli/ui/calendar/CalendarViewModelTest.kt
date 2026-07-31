@@ -24,6 +24,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -278,15 +279,65 @@ class CalendarViewModelTest {
             assertEquals(true, occurrence.overrides.blocksSharedFreeTime)
         }
 
+    @Test
+    fun `notification deep link jumps to the day and opens the event sheet`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val day = LocalDate.of(2026, 8, 3)
+            val target = partnerTogetherEvent(id = "wz-1", day = day)
+            val other = partnerTogetherEvent(id = "wz-2", day = day)
+            val fixture = fixture(mergedEvents = listOf(other, target))
+            advanceUntilIdle()
+
+            fixture.viewModel.openDeepLinkedEvent(
+                day = day,
+                key = EventKey(source = CalendarSource.GOOGLE_PARTNER, eventId = "wz-1"),
+            )
+            advanceUntilIdle()
+
+            assertEquals(day, fixture.viewModel.uiState.value.selectedDay)
+            assertEquals(target, fixture.viewModel.uiState.value.selectedEvent)
+        }
+
+    @Test
+    fun `notification deep link still jumps to the day when the event is gone`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val day = LocalDate.of(2026, 8, 3)
+            val fixture = fixture(mergedEvents = listOf(partnerTogetherEvent(id = "wz-1", day = day)))
+            advanceUntilIdle()
+
+            fixture.viewModel.openDeepLinkedEvent(
+                day = day,
+                key = EventKey(source = CalendarSource.GOOGLE_PARTNER, eventId = "deleted"),
+            )
+            advanceUntilIdle()
+
+            assertEquals(day, fixture.viewModel.uiState.value.selectedDay)
+            assertNull(fixture.viewModel.uiState.value.selectedEvent)
+        }
+
+    private fun partnerTogetherEvent(id: String, day: LocalDate): CalendarEvent =
+        CalendarEvent(
+            id = id,
+            title = "Wochenende bei euch $id",
+            start = day.atTime(10, 0),
+            end = day.atTime(12, 0),
+            isAllDay = false,
+            source = CalendarSource.GOOGLE_PARTNER,
+            owner = Person.MELLI,
+            isSharedEvent = true,
+            category = EventCategory.TOGETHER,
+        )
+
     private fun fixture(
         initialCustomizations: List<EventCustomization> = emptyList(),
         sharingResult: Result<Unit> = Result.success(Unit),
+        mergedEvents: List<CalendarEvent> = emptyList(),
     ): Fixture {
         val calendarRepository = RecordingCalendarRepository(sharingResult)
         val customizationRepository = InMemoryCustomizationRepository(initialCustomizations)
         return Fixture(
             viewModel = CalendarViewModel(
-                mergeService = EmptyMergeService(),
+                mergeService = FixedMergeService(mergedEvents),
                 calendarRepository = calendarRepository,
                 customizationRepository = customizationRepository,
             ),
@@ -339,8 +390,10 @@ class CalendarViewModelTest {
         val customizationRepository: InMemoryCustomizationRepository,
     )
 
-    private class EmptyMergeService : CalendarMergeService {
-        override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = emptyList()
+    private class FixedMergeService(
+        private val events: List<CalendarEvent> = emptyList(),
+    ) : CalendarMergeService {
+        override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = events
 
         override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> = emptyList()
 

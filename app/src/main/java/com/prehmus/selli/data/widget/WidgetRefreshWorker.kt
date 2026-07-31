@@ -3,10 +3,17 @@ package com.prehmus.selli.data.widget
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.prehmus.selli.data.notification.SharedEventFingerprintStore
+import com.prehmus.selli.data.notification.SharedEventNotifier
+import com.prehmus.selli.domain.merge.SharedFreeTimeCalculator
+import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
+import com.prehmus.selli.domain.model.FreeSlot
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.WidgetSnapshot
+import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
 import com.prehmus.selli.domain.widget.NextPartnerEventSelector
+import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
 import java.time.LocalDateTime
 import kotlinx.coroutines.CancellationException
@@ -22,12 +29,11 @@ class WidgetRefreshWorker(
         return try {
             val today = LocalDate.now()
             val now = LocalDateTime.now()
-            val events = mergeServiceFactory(applicationContext).mergedEvents(
-                DateRange(
-                    start = today,
-                    endInclusive = today.plusDays(LOOKAHEAD_DAYS),
-                ),
-            )
+            val range = DateRange(start = today, endInclusive = today.plusDays(LOOKAHEAD_DAYS))
+            // Ein Fetch für alles: Zeile 1 (nächster Partnertermin), Zeile 2 (nächste Wir-Zeit),
+            // Zeile 3 (nächster freier Slot) und die Benachrichtigungs-Erkennung teilen sich
+            // dieselbe Terminliste — kein zusätzlicher Request an Google oder die ICS-Feeds.
+            val events = mergeServiceFactory(applicationContext).mergedEvents(range)
             val nextEvent = NextPartnerEventSelector().select(
                 events = events,
                 partner = partner.person,
@@ -38,10 +44,16 @@ class WidgetRefreshWorker(
                 partnerDisplayName = partner.displayName,
                 nextEvent = nextEvent,
                 updatedAt = now,
+                nextSharedEvent = NextSharedEventSelector().select(events = events, now = now),
+                nextFreeSlot = nextFreeSlot(range = range, events = events, now = now),
             )
 
             WidgetSnapshotStore(applicationContext).save(snapshot)
             WidgetRuntime.onSnapshotUpdated?.invoke(applicationContext)
+
+            // Nach dem Snapshot und bewusst fehlertolerant: eine Panne beim Benachrichtigen darf
+            // weder das frische Widget kosten noch über Result.retry() zu Doppel-Meldungen führen.
+            runCatching { notifySharedEventChanges(events = events, partner = partner) }
 
             Result.success()
         } catch (cancelled: CancellationException) {
@@ -53,6 +65,41 @@ class WidgetRefreshWorker(
                 Result.success()
             }
         }
+    }
+
+    /**
+     * Frühester gemeinsamer freier Block im Fenster, der noch nicht vorbei ist — heute zählen
+     * also nur Blöcke, die jetzt noch etwas übrig haben.
+     */
+    private fun nextFreeSlot(
+        range: DateRange,
+        events: List<CalendarEvent>,
+        now: LocalDateTime,
+    ): FreeSlot? =
+        SharedFreeTimeCalculator.freeBlocksInRange(range, events)
+            .asSequence()
+            .flatMap { (day, blocks) -> blocks.asSequence().map { block -> FreeSlot(day, block) } }
+            .firstOrNull { slot -> slot.block.end > now }
+
+    /**
+     * Wir-Zeit-Änderungen des Partners melden. Sind Benachrichtigungen aus, wird der komplette
+     * Schritt übersprungen — auch das Mitschreiben des gesehenen Stands. Sonst würden Termine aus
+     * dieser Phase still als "bereits gesehen" gelten und nach dem Erteilen der Berechtigung nie
+     * nachgemeldet.
+     */
+    private fun notifySharedEventChanges(events: List<CalendarEvent>, partner: PartnerInfo) {
+        val notifier = SharedEventNotifier(applicationContext)
+        if (!notifier.areNotificationsEnabled()) return
+
+        val store = SharedEventFingerprintStore(applicationContext)
+        val result = PartnerSharedEventChangeDetector().detect(
+            currentEvents = events,
+            partner = partner.person,
+            previouslySeen = store.load(),
+        )
+
+        notifier.notifyChanges(result.changes, partner.displayName)
+        store.save(result.updatedFingerprints)
     }
 
     private fun loadPartnerInfo(): PartnerInfo? {
