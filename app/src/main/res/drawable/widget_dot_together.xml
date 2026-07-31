@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Runde Wir-Zeit-Pille im Verlauf der beiden Selli-Personenfarben. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="oval">
+    <gradient
+        android:angle="45"
+        android:endColor="@color/person_basti"
+        android:startColor="@color/person_melli"
+        android:type="linear" />
+</shape>

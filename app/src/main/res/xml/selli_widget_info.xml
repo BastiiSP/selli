@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Homescreen-Widget "Nächster Partnertermin". updatePeriodMillis=0, weil die
-     Aktualisierung der WorkManager-Scheduler aus data/widget übernimmt. -->
+<!-- Responsives Homescreen-Widget mit drei Höhenstufen. Die Default-Platzierung bleibt
+     eine Zelle hoch; updatePeriodMillis=0, weil data/widget per WorkManager aktualisiert. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="180dp"
     android:minHeight="60dp"
+    android:maxResizeWidth="360dp"
+    android:maxResizeHeight="240dp"
     android:targetCellWidth="4"
     android:targetCellHeight="1"
     android:updatePeriodMillis="0"
