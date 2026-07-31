@@ -82,7 +82,7 @@ class WidgetRefreshWorker(
         const val GOOGLE_CALENDAR_PREFS_NAME = "selli_google_calendar"
         const val KEY_PARTNER_PERSON = "partner_person"
         const val KEY_PARTNER_DISPLAY_NAME = "partner_display_name"
-        const val LOOKAHEAD_DAYS = 14L
+        const val LOOKAHEAD_DAYS = 30L
         const val MAX_RETRY_ATTEMPTS = 2
     }
 }

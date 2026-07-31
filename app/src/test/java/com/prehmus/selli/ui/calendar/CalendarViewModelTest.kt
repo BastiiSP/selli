@@ -343,6 +343,18 @@ class CalendarViewModelTest {
         override suspend fun mergedEvents(range: DateRange): List<CalendarEvent> = emptyList()
 
         override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> = emptyList()
+
+        override suspend fun freeBlocksInRange(
+            range: DateRange,
+        ): Map<LocalDate, List<FreeTimeBlock>> {
+            val freeBlocksByDay = linkedMapOf<LocalDate, List<FreeTimeBlock>>()
+            var day = range.start
+            while (!day.isAfter(range.endInclusive)) {
+                freeBlocksByDay[day] = emptyList()
+                day = day.plusDays(1)
+            }
+            return freeBlocksByDay
+        }
     }
 
     private data class SharingCall(

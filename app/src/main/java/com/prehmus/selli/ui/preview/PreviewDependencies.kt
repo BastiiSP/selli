@@ -123,6 +123,18 @@ class PreviewDependencies : AppDependencies {
             if (Duration.between(cursor, windowEnd) >= minBlock) free += FreeTimeBlock(cursor, windowEnd)
             return free
         }
+
+        override suspend fun freeBlocksInRange(
+            range: DateRange,
+        ): Map<LocalDate, List<FreeTimeBlock>> {
+            val freeBlocksByDay = linkedMapOf<LocalDate, List<FreeTimeBlock>>()
+            var day = range.start
+            while (!day.isAfter(range.endInclusive)) {
+                freeBlocksByDay[day] = freeBlocks(day)
+                day = day.plusDays(1)
+            }
+            return freeBlocksByDay
+        }
     }
 
     override val sessionRepository: SessionRepository = object : SessionRepository {

@@ -6,6 +6,8 @@ import java.time.LocalTime
 
 data class EventKey(val source: CalendarSource, val eventId: String)
 
+fun CalendarEvent.key(): EventKey = EventKey(source = source, eventId = id)
+
 /** Alle Felder optional; null = Originalwert behalten. */
 data class EventFieldOverrides(
     val title: String? = null,

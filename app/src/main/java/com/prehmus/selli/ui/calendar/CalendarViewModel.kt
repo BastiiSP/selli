@@ -13,10 +13,10 @@ import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.EventFieldOverrides
-import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.SourceLoadError
+import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import java.time.LocalDate
@@ -549,8 +549,6 @@ class CalendarViewModel(
             )
         }.isSuccess
     }
-
-    private fun CalendarEvent.key() = EventKey(source = source, eventId = id)
 
     private fun CalendarEvent.customizationTarget(wholeSeries: Boolean): CustomizationTarget {
         val seriesId = seriesId

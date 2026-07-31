@@ -812,6 +812,41 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun freeBlocksInRange_matchesPerDayResultsForBusyAndFreeDays() = runTest {
+        val busyDay = testDay
+        val freeDay = testDay.plusDays(1)
+        val timed = event(
+            id = "meeting",
+            start = busyDay.atTime(9, 0),
+            end = busyDay.atTime(22, 0),
+        )
+        val service = service(googleEvents = listOf(timed))
+
+        val result = service.freeBlocksInRange(
+            DateRange(start = busyDay, endInclusive = freeDay),
+        )
+
+        assertEquals(service.freeBlocks(busyDay), result[busyDay])
+        assertEquals(service.freeBlocks(freeDay), result[freeDay])
+        assertEquals(emptyList<FreeTimeBlock>(), result[busyDay])
+        assertEquals(setOf(busyDay, freeDay), result.keys)
+    }
+
+    @Test
+    fun freeBlocksInRange_fetchesOncePerRangeInsteadOfPerDay() = runTest {
+        val googleRepository = FakeGoogleCalendarRepository(
+            events = emptyList(),
+            failure = null,
+        )
+        val service = service(googleCalendarRepository = googleRepository)
+        val range = DateRange(start = testDay, endInclusive = testDay.plusDays(9))
+
+        service.freeBlocksInRange(range)
+
+        assertEquals(1, googleRepository.fetchCount)
+    }
+
+    @Test
     fun isBothFree_returnsTrueWhenDayIsEmpty() = runTest {
         val service = service()
 
@@ -963,12 +998,14 @@ class DefaultCalendarMergeServiceTest {
         customizations: List<EventCustomization> = emptyList(),
         customizationFailure: Throwable? = null,
         logger: CalendarLogger = FakeCalendarLogger(),
-    ): DefaultCalendarMergeService =
-        DefaultCalendarMergeService(
-            googleCalendarRepository = FakeGoogleCalendarRepository(
+        googleCalendarRepository: FakeGoogleCalendarRepository =
+            FakeGoogleCalendarRepository(
                 events = googleEvents,
                 failure = googleFailure,
             ),
+    ): DefaultCalendarMergeService =
+        DefaultCalendarMergeService(
+            googleCalendarRepository = googleCalendarRepository,
             icsCalendarRepository = FakeIcsCalendarRepository(
                 events = icsEvents,
                 failure = icsFailure,
@@ -1045,6 +1082,8 @@ class DefaultCalendarMergeServiceTest {
         private val events: List<CalendarEvent>,
         private val failure: Throwable?,
     ) : GoogleCalendarRepository {
+        var fetchCount = 0
+            private set
 
         override suspend fun signIn(): AuthResult =
             error("Not needed for merge tests")
@@ -1056,6 +1095,7 @@ class DefaultCalendarMergeServiceTest {
             error("Not needed for merge tests")
 
         override suspend fun fetchEvents(range: DateRange): List<CalendarEvent> {
+            fetchCount += 1
             failure?.let { throw it }
             return events
         }
