@@ -166,9 +166,10 @@ fun CreateEventSheet(
                     )
                 }
                 LabeledSwitch(
-                    label = "Als gemeinsam verplante Zeit werten",
+                    label = "Zählt als beschäftigt",
                     checked = blocksSharedFreeTime,
                     onCheckedChange = { blocksSharedFreeTime = it },
+                    description = "Blockiert eure gemeinsame Frei-Zeit-Anzeige – unabhängig von der Kategorie.",
                 )
             } else {
                 OutlinedButton(
@@ -436,16 +437,25 @@ internal fun LabeledSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    description: String? = null,
 ) {
     Row(
         modifier = modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.titleSmall,
-            modifier = Modifier.weight(1f),
-        )
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+            )
+            description?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }

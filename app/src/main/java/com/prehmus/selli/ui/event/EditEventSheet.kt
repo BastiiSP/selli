@@ -136,9 +136,10 @@ fun EditEventSheet(
                 }
             } else {
                 LabeledSwitch(
-                    label = "Als gemeinsam verplante Zeit werten",
+                    label = "Zählt als beschäftigt",
                     checked = blocksSharedFreeTime,
                     onCheckedChange = { blocksSharedFreeTime = it },
+                    description = "Blockiert eure gemeinsame Frei-Zeit-Anzeige – unabhängig von der Kategorie.",
                 )
             }
 
