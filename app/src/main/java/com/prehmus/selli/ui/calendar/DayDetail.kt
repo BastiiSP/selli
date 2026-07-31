@@ -4,9 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -17,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
@@ -55,6 +60,7 @@ fun DayDetail(
         if (events.isEmpty()) {
             EmptyDay(bothFree = bothFree, modifier = Modifier.fillMaxWidth())
         } else {
+            val rows = remember(events) { events.toEventListRows() }
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -62,8 +68,63 @@ fun DayDetail(
                     start = 16.dp, end = 16.dp, bottom = 96.dp,
                 ),
             ) {
-                items(events, key = { "${it.source}:${it.id}" }) { event ->
-                    EventCard(event = event, onClick = { onEventClick(event) })
+                items(
+                    items = rows,
+                    key = { row ->
+                        when (row) {
+                            is EventListRow.Single ->
+                                "single:${row.event.source}:${row.event.id}"
+                            is EventListRow.Group ->
+                                "group:${row.wirTermin.source}:${row.wirTermin.id}"
+                        }
+                    },
+                ) { row ->
+                    when (row) {
+                        is EventListRow.Single ->
+                            EventCard(
+                                event = row.event,
+                                onClick = { onEventClick(row.event) },
+                            )
+                        is EventListRow.Group ->
+                            EventGroupCard(row = row, onEventClick = onEventClick)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EventGroupCard(
+    row: EventListRow.Group,
+    onEventClick: (CalendarEvent) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        EventCard(
+            event = row.wirTermin,
+            onClick = { onEventClick(row.wirTermin) },
+        )
+        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(selliGradient(), CircleShape),
+            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                row.overlapping.forEach { event ->
+                    EventCard(
+                        event = event,
+                        onClick = { onEventClick(event) },
+                    )
                 }
             }
         }
