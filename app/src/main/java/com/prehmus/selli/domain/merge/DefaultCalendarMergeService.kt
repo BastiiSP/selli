@@ -22,7 +22,6 @@ import com.prehmus.selli.domain.repository.NoOpEventCustomizationRepository
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.LocalTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -200,92 +199,21 @@ class DefaultCalendarMergeService(
         )
     }
 
+    /**
+     * Die Rechnung selbst liegt in [SharedFreeTimeCalculator] — hier wird nur noch geladen.
+     * So kann der Widget-Job dieselbe Logik auf seine ohnehin schon geholten 30 Tage anwenden,
+     * ohne pro Tag erneut zu laden.
+     */
     override suspend fun freeBlocks(day: LocalDate): List<FreeTimeBlock> =
-        computeFreeBlocks(
+        SharedFreeTimeCalculator.freeBlocksOn(
             day = day,
             events = mergedEvents(DateRange(start = day, endInclusive = day)),
         )
 
     override suspend fun freeBlocksInRange(
         range: DateRange,
-    ): Map<LocalDate, List<FreeTimeBlock>> {
-        val events = mergedEvents(range)
-        val freeBlocksByDay = linkedMapOf<LocalDate, List<FreeTimeBlock>>()
-        var day = range.start
-        while (!day.isAfter(range.endInclusive)) {
-            freeBlocksByDay[day] = computeFreeBlocks(day, events)
-            day = day.plusDays(1)
-        }
-        return freeBlocksByDay
-    }
-
-    /**
-     * Liefert alle mindestens drei Stunden langen Blöcke im gemeinsamen Tagesfenster.
-     * Ganztägige Events blockieren nur mit expliziter lokaler Festlegung, weil sie in den
-     * verbundenen Kalendern häufig reine Marker wie Geburtstage sind.
-     */
-    private fun computeFreeBlocks(
-        day: LocalDate,
-        events: List<CalendarEvent>,
-    ): List<FreeTimeBlock> {
-        val window = TimeInterval(
-            start = day.atTime(FREE_WINDOW_START),
-            end = day.atTime(FREE_WINDOW_END),
-        )
-        val blockedIntervals = events
-            .asSequence()
-            .filter { event -> !event.isAllDay || event.blocksSharedFreeTime }
-            .mapNotNull { event -> event.blockedIntervalIn(window) }
-            .sortedBy { interval -> interval.start }
-            .toList()
-            .mergeTouching()
-
-        val free = mutableListOf<FreeTimeBlock>()
-        var cursor = window.start
-        for (blockedInterval in blockedIntervals) {
-            if (Duration.between(cursor, blockedInterval.start) >= MINIMUM_SHARED_FREE_BLOCK) {
-                free += FreeTimeBlock(cursor, blockedInterval.start)
-            }
-            if (blockedInterval.end > cursor) {
-                cursor = blockedInterval.end
-            }
-        }
-
-        if (Duration.between(cursor, window.end) >= MINIMUM_SHARED_FREE_BLOCK) {
-            free += FreeTimeBlock(cursor, window.end)
-        }
-        return free
-    }
-
-    private fun CalendarEvent.blockedIntervalIn(window: TimeInterval): TimeInterval? {
-        val clippedStart = maxOf(start, window.start)
-        val clippedEnd = minOf(end, window.end)
-
-        return if (clippedStart < clippedEnd) {
-            TimeInterval(start = clippedStart, end = clippedEnd)
-        } else {
-            null
-        }
-    }
-
-    private fun List<TimeInterval>.mergeTouching(): List<TimeInterval> {
-        if (isEmpty()) return emptyList()
-
-        val merged = mutableListOf<TimeInterval>()
-        var current = first()
-
-        for (interval in drop(1)) {
-            current = if (interval.start <= current.end) {
-                current.copy(end = maxOf(current.end, interval.end))
-            } else {
-                merged += current
-                interval
-            }
-        }
-
-        merged += current
-        return merged
-    }
+    ): Map<LocalDate, List<FreeTimeBlock>> =
+        SharedFreeTimeCalculator.freeBlocksInRange(range, mergedEvents(range))
 
     private suspend fun fetchSource(
         source: String,
@@ -326,11 +254,6 @@ class DefaultCalendarMergeService(
         val range: DateRange,
     )
 
-    private data class TimeInterval(
-        val start: LocalDateTime,
-        val end: LocalDateTime,
-    )
-
     private companion object {
         const val GOOGLE_SOURCE = "Google calendars"
         const val BASTI_ICS_SOURCE = "Basti ICS work calendar"
@@ -339,8 +262,5 @@ class DefaultCalendarMergeService(
         const val BASTI_ICS_DISPLAY_NAME = "Bastis Arbeitskalender"
         const val MELLI_ICS_DISPLAY_NAME = "Mellis Arbeitskalender"
         const val CUSTOMIZATION_SOURCE = "Event customizations"
-        val FREE_WINDOW_START: LocalTime = LocalTime.of(9, 0)
-        val FREE_WINDOW_END: LocalTime = LocalTime.of(22, 0)
-        val MINIMUM_SHARED_FREE_BLOCK: Duration = Duration.ofHours(3)
     }
 }
