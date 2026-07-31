@@ -2,8 +2,11 @@ package com.prehmus.selli
 
 import android.app.Application
 import androidx.glance.appwidget.updateAll
+import com.prehmus.selli.data.customization.FileEventCustomizationRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
+import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
+import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.widget.WidgetRefreshScheduler
 import com.prehmus.selli.data.widget.WidgetRuntime
 import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
@@ -30,6 +33,14 @@ class SelliApplication : Application() {
                     personResolver = { Person.BASTI },
                 ),
                 OkHttpIcsCalendarRepository(),
+                customizationRepository = FileEventCustomizationRepository(context = context),
+                logger = AndroidCalendarLogger,
+                // Ohne diesen Feed fehlten Mellis Arbeitstermine bislang komplett im Widget —
+                // dieselbe Verdrahtung wie in DefaultAppDependencies.kt für die Haupt-App.
+                melliIcsCalendarRepository = OkHttpIcsCalendarRepository(
+                    feedUrl = BuildConfig.MELLI_ICS_FEED_URL,
+                    parser = IcsCalendarParser(owner = Person.MELLI),
+                ),
             )
         }
         WidgetRuntime.onSnapshotUpdated = { context -> SelliWidget().updateAll(context) }
