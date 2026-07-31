@@ -3,7 +3,6 @@ package com.prehmus.selli.ui.widget
 import android.content.Context
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
@@ -54,8 +53,13 @@ import java.util.Locale
  */
 class SelliWidget : GlanceAppWidget() {
 
-    override val sizeMode: SizeMode =
-        SizeMode.Responsive(setOf(WidgetSizeSmall, WidgetSizeMedium, WidgetSizeLarge))
+    // Exact statt Responsive: Responsive rundet nur auf eine von fest deklarierten Größen —
+    // trifft ein Launcher beim Ziehen nie genau eine davon, bleibt die Anzeige auf der falschen
+    // Stufe hängen (live bei Basti beobachtet: reale Größe war deutlich über "Mittel", zeigte
+    // aber weiterhin nur zwei Zeilen mit viel Leerraum darunter). Exact liefert die echte
+    // aktuelle Höhe, wir entscheiden selbst per Schwellenwert — funktioniert unabhängig davon,
+    // in welchen Schritten ein Launcher tatsächlich rastert.
+    override val sizeMode: SizeMode = SizeMode.Exact
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val snapshot = WidgetSnapshotStore(context).load()
@@ -70,9 +74,13 @@ class SelliWidget : GlanceAppWidget() {
 private val TextPrimary = ColorProvider(day = Color(0xFF3B3439), night = Color(0xFFF1EBE7))
 private val TextSoft = ColorProvider(day = Color(0xFF776E74), night = Color(0xFFB5ABB1))
 
-private val WidgetSizeSmall = DpSize(180.dp, 60.dp)
-private val WidgetSizeMedium = DpSize(180.dp, 120.dp)
-private val WidgetSizeLarge = DpSize(180.dp, 180.dp)
+// Schwellenwerte statt fester Ziel-Größen: Mit SizeMode.Exact bekommen wir die echte aktuelle
+// Höhe, egal in welchen Schritten ein Launcher rastert. Grober Bedarf pro Zeile: eine Zeile
+// (Avatar-Layout) ~55dp, jede weitere Zeile (Icon-Layout + 8dp Abstand) ~53dp, plus 24dp
+// vertikales Innenpolster der Karte. Schwellen bewusst mit Puffer über dem reinen Minimum,
+// damit eine Zeile nicht schon bei einem winzigen Größenzuwachs unschön abgeschnitten reinpasst.
+private val MEDIUM_HEIGHT_THRESHOLD = 130.dp
+private val LARGE_HEIGHT_THRESHOLD = 190.dp
 
 private enum class WidgetTier { SMALL, MEDIUM, LARGE }
 
@@ -80,8 +88,8 @@ private enum class WidgetTier { SMALL, MEDIUM, LARGE }
 private fun WidgetCard(snapshot: WidgetSnapshot?, today: LocalDate) {
     val currentSize = LocalSize.current
     val widgetTier = when {
-        currentSize.height >= WidgetSizeLarge.height -> WidgetTier.LARGE
-        currentSize.height >= WidgetSizeMedium.height -> WidgetTier.MEDIUM
+        currentSize.height >= LARGE_HEIGHT_THRESHOLD -> WidgetTier.LARGE
+        currentSize.height >= MEDIUM_HEIGHT_THRESHOLD -> WidgetTier.MEDIUM
         else -> WidgetTier.SMALL
     }
 
