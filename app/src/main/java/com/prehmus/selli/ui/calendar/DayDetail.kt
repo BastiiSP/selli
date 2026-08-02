@@ -201,7 +201,7 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
                 if (event.category != EventCategory.TOGETHER) {
                     PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
                 }
-                CategoryChip(category = event.category)
+                CategoryChip(category = event.category, owner = event.owner)
             }
         }
     }

@@ -91,12 +91,14 @@ fun eventTimelineStyle(event: CalendarEvent): EventTimelineStyle {
 
 /**
  * Kleine Kategorie-Kennung an jedem Termin. „Wir-Zeit" greift bewusst den schon
- * vorhandenen Lila-Grün-Verlauf für gemeinsame Termine auf (keine neue
- * Farbsprache), Arbeit/Privat bleiben ruhige Container-Töne, damit die Wir-Zeit
- * optisch heraussticht.
+ * vorhandenen Lila-Grün-Verlauf für gemeinsame Termine auf (keine neue Farbsprache).
+ * „Arbeit" trägt den weichen Personen-Container-Ton (Lila für Melli, Grün für Basti,
+ * über das Theme schon als `primaryContainer`/`secondaryContainer` hinterlegt) — sonst
+ * sähen Mellis Arbeitstermine fälschlich grün statt lila aus. „Privat" bleibt bewusst
+ * neutral, damit „Arbeit"/„Wir-Zeit" optisch heraussticht.
  */
 @Composable
-fun CategoryChip(category: EventCategory, modifier: Modifier = Modifier) {
+fun CategoryChip(category: EventCategory, owner: Person, modifier: Modifier = Modifier) {
     when (category) {
         EventCategory.TOGETHER -> Box(
             modifier = modifier
@@ -112,11 +114,19 @@ fun CategoryChip(category: EventCategory, modifier: Modifier = Modifier) {
         }
         else -> {
             val container = when (category) {
-                EventCategory.WORK -> MaterialTheme.colorScheme.secondaryContainer
+                EventCategory.WORK -> if (owner == Person.MELLI) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.secondaryContainer
+                }
                 else -> MaterialTheme.colorScheme.surfaceVariant
             }
             val content = when (category) {
-                EventCategory.WORK -> MaterialTheme.colorScheme.onSecondaryContainer
+                EventCategory.WORK -> if (owner == Person.MELLI) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                }
                 else -> MaterialTheme.colorScheme.onSurfaceVariant
             }
             Surface(modifier = modifier, shape = CircleShape, color = container) {
