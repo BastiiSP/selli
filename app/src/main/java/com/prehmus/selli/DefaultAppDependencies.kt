@@ -47,7 +47,7 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
     private val melliIcsCalendarRepository: IcsCalendarRepository =
         OkHttpIcsCalendarRepository(
             feedUrl = BuildConfig.MELLI_ICS_FEED_URL,
-            parser = IcsCalendarParser(owner = Person.MELLI),
+            parser = IcsCalendarParser(owner = Person.MELLI, preferCalendarNameAsLocation = true),
         )
 
     // Lokale Ausblendungen/Anpassungen: liegen nur auf dem Gerät und werden im

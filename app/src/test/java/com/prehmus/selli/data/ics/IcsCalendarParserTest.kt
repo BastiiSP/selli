@@ -235,6 +235,75 @@ class IcsCalendarParserTest {
         assertFalse(event.isSharedEvent)
     }
 
+    @Test
+    fun `replaces per-event location with calendar name when preferred`() {
+        val event = IcsCalendarParser(
+            systemZone = ZoneId.of("Europe/Berlin"),
+            owner = Person.MELLI,
+            preferCalendarNameAsLocation = true,
+        ).parse(
+            """
+            BEGIN:VCALENDAR
+            X-WR-CALNAME:Boulderlounge Chemnitz GmbH
+            BEGIN:VEVENT
+            UID:shift-1
+            DTSTART:20260110T090000
+            DTEND:20260110T170000
+            SUMMARY:Frühschicht
+            LOCATION:Melanie S.
+            END:VEVENT
+            END:VCALENDAR
+            """.trimIndent(),
+            range,
+        ).single()
+
+        assertEquals("Boulderlounge Chemnitz GmbH", event.location)
+    }
+
+    @Test
+    fun `keeps per-event location when calendar name is preferred but missing`() {
+        val event = IcsCalendarParser(
+            systemZone = ZoneId.of("Europe/Berlin"),
+            owner = Person.MELLI,
+            preferCalendarNameAsLocation = true,
+        ).parse(
+            """
+            BEGIN:VCALENDAR
+            BEGIN:VEVENT
+            UID:shift-2
+            DTSTART:20260110T090000
+            DTEND:20260110T170000
+            SUMMARY:Frühschicht
+            LOCATION:Melanie S.
+            END:VEVENT
+            END:VCALENDAR
+            """.trimIndent(),
+            range,
+        ).single()
+
+        assertEquals("Melanie S.", event.location)
+    }
+
+    @Test
+    fun `ignores calendar name when preference is off`() {
+        val event = parse(
+            """
+            BEGIN:VCALENDAR
+            X-WR-CALNAME:Boulderlounge Chemnitz GmbH
+            BEGIN:VEVENT
+            UID:shift-3
+            DTSTART:20260110T090000
+            DTEND:20260110T170000
+            SUMMARY:Frühschicht
+            LOCATION:Melanie S.
+            END:VEVENT
+            END:VCALENDAR
+            """.trimIndent(),
+        ).single()
+
+        assertEquals("Melanie S.", event.location)
+    }
+
     private fun parse(ics: String): List<CalendarEvent> {
         return IcsCalendarParser(systemZone = ZoneId.of("Europe/Berlin")).parse(ics, range)
     }

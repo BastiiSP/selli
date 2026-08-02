@@ -39,7 +39,7 @@ class SelliApplication : Application() {
                 // dieselbe Verdrahtung wie in DefaultAppDependencies.kt für die Haupt-App.
                 melliIcsCalendarRepository = OkHttpIcsCalendarRepository(
                     feedUrl = BuildConfig.MELLI_ICS_FEED_URL,
-                    parser = IcsCalendarParser(owner = Person.MELLI),
+                    parser = IcsCalendarParser(owner = Person.MELLI, preferCalendarNameAsLocation = true),
                 ),
             )
         }

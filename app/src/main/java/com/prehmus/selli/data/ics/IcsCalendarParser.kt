@@ -23,13 +23,32 @@ import java.util.Locale
 class IcsCalendarParser(
     private val systemZone: ZoneId = ZoneId.systemDefault(),
     private val owner: Person = Person.BASTI,
+    /**
+     * Manche Anbieter (bestätigt bei Mellis Dr.-Plano-Feed) missbrauchen das LOCATION-Feld
+     * jedes einzelnen Termins für Mitarbeiter-Namen statt einen echten Ort einzutragen — das
+     * landet dann unpassend im Google-Maps-Button. Der Kalendername (X-WR-CALNAME, z. B.
+     * "Boulderlounge Chemnitz GmbH") ist bei so einem Feed die verlässlichere Angabe für den
+     * tatsächlichen Arbeitsort und ersetzt dann das Location-Feld aller Termine dieser Quelle.
+     * Wird kein Kalendername gefunden, bleibt das Verhalten unverändert (Fallback auf LOCATION).
+     */
+    private val preferCalendarNameAsLocation: Boolean = false,
 ) {
     fun parse(ics: String, range: DateRange): List<CalendarEvent> {
+        val locationOverride = calendarName(ics).takeIf { preferCalendarNameAsLocation }
         return parseVEvents(ics)
             .filterNot { it.property("STATUS")?.value.equals("CANCELLED", ignoreCase = true) }
-            .flatMap { it.toCalendarEvents(range) }
+            .flatMap { it.toCalendarEvents(range, locationOverride) }
             .filter { it.intersects(range) }
             .sortedWith(compareBy<CalendarEvent> { it.start }.thenBy { it.id })
+    }
+
+    private fun calendarName(ics: String): String? {
+        val prefix = "X-WR-CALNAME:"
+        return unfoldLines(ics)
+            .firstOrNull { it.startsWith(prefix, ignoreCase = true) }
+            ?.substring(prefix.length)
+            ?.unescapeText()
+            ?.ifBlank { null }
     }
 
     private fun parseVEvents(ics: String): List<IcsEvent> {
@@ -87,7 +106,7 @@ class IcsCalendarParser(
         return IcsProperty(name = name, parameters = parameters, value = value)
     }
 
-    private fun IcsEvent.toCalendarEvents(range: DateRange): List<CalendarEvent> {
+    private fun IcsEvent.toCalendarEvents(range: DateRange, locationOverride: String?): List<CalendarEvent> {
         val startProperty = property("DTSTART") ?: return emptyList()
         val start = parseDateTime(startProperty)
         val endProperty = property("DTEND")
@@ -100,7 +119,8 @@ class IcsCalendarParser(
         val durationSeconds = Duration.between(start.dateTime, end).seconds
         val uid = property("UID")?.value?.ifBlank { null } ?: start.dateTime.toString()
         val title = property("SUMMARY")?.value?.unescapeText().orEmpty()
-        val location = property("LOCATION")?.value?.unescapeText()?.ifBlank { null }
+        val location = locationOverride
+            ?: property("LOCATION")?.value?.unescapeText()?.ifBlank { null }
         val description = property("DESCRIPTION")?.value?.unescapeText()?.ifBlank { null }
         val base = ParsedEvent(
             uid = uid,
