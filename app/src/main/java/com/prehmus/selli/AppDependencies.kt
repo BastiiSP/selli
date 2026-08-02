@@ -5,6 +5,7 @@ import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 
 /**
@@ -19,4 +20,7 @@ interface AppDependencies {
     val calendarRepository: CalendarRepository
     val sessionRepository: SessionRepository
     val eventCustomizationRepository: EventCustomizationRepository
+
+    /** Adressvorschläge für das Ortsfeld — liefert bei fehlendem Schlüssel einfach nichts. */
+    val placeSuggestionRepository: PlaceSuggestionRepository
 }

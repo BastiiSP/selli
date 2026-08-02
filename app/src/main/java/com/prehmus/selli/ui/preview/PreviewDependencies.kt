@@ -13,10 +13,12 @@ import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.SessionState
+import com.prehmus.selli.domain.places.LocationSuggestion
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.Duration
 import java.time.LocalDate
@@ -156,6 +158,42 @@ class PreviewDependencies : AppDependencies {
             }
 
             override suspend fun all(): List<EventCustomization> = stored.toList()
+        }
+
+    // Zwei feste Beispieladressen, damit die Vorschlagsliste in der Preview sichtbar ist —
+    // ohne Netz, ohne Schlüssel.
+    override val placeSuggestionRepository: PlaceSuggestionRepository =
+        object : PlaceSuggestionRepository {
+            override suspend fun suggest(
+                query: String,
+                sessionToken: String?,
+            ): List<LocationSuggestion> {
+                if (query.trim().length < 3) return emptyList()
+                return listOf(
+                    LocationSuggestion(
+                        placeId = "preview-cafe",
+                        primaryText = "Café Ohnesorg",
+                        secondaryText = "Hauptstraße 12, 34117 Kassel",
+                        fullText = "Café Ohnesorg, Hauptstraße 12, 34117 Kassel",
+                    ),
+                    LocationSuggestion(
+                        placeId = "preview-bahnhof",
+                        primaryText = "Bahnhof Kassel-Wilhelmshöhe",
+                        secondaryText = "Willy-Brandt-Platz 5, 34131 Kassel",
+                        fullText = "Bahnhof Kassel-Wilhelmshöhe, Willy-Brandt-Platz 5, 34131 Kassel",
+                    ),
+                )
+            }
+
+            override suspend fun resolveFullAddress(
+                placeId: String,
+                sessionToken: String?,
+            ): String? = when (placeId) {
+                "preview-cafe" -> "Café Ohnesorg, Hauptstraße 12, 34117 Kassel, Deutschland"
+                "preview-bahnhof" ->
+                    "Bahnhof Kassel-Wilhelmshöhe, Willy-Brandt-Platz 5, 34131 Kassel, Deutschland"
+                else -> null
+            }
         }
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {

@@ -43,6 +43,11 @@ android {
         )
         buildConfigField(
             "String",
+            "PLACES_API_KEY",
+            buildConfigStringProperty("selli.placesApiKey"),
+        )
+        buildConfigField(
+            "String",
             "MELLI_ICS_FEED_URL",
             buildConfigStringProperty("selli.melliIcsFeedUrl"),
         )

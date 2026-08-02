@@ -16,10 +16,10 @@ class NewCalendarEventDraftFactoryTest {
         val event = buildNewCalendarEvent(
             title = " Urlaub ",
             startDay = LocalDate.of(2026, 8, 3),
-            endDayInclusive = LocalDate.of(2026, 8, 7),
-            isAllDay = true,
             startTime = LocalTime.of(18, 0),
+            endDay = LocalDate.of(2026, 8, 7),
             endTime = LocalTime.of(19, 0),
+            isAllDay = true,
             location = " Ostsee ",
             category = EventCategory.TOGETHER,
             recurrence = null,
@@ -41,10 +41,10 @@ class NewCalendarEventDraftFactoryTest {
             buildNewCalendarEvent(
                 title = "Ausflug",
                 startDay = LocalDate.of(2026, 8, 7),
-                endDayInclusive = LocalDate.of(2026, 8, 6),
-                isAllDay = true,
                 startTime = LocalTime.NOON,
+                endDay = LocalDate.of(2026, 8, 6),
                 endTime = LocalTime.of(13, 0),
+                isAllDay = true,
                 location = null,
                 category = EventCategory.PRIVATE,
                 recurrence = null,
@@ -60,10 +60,10 @@ class NewCalendarEventDraftFactoryTest {
         val event = buildNewCalendarEvent(
             title = "Kino",
             startDay = day,
-            endDayInclusive = day.plusDays(4),
-            isAllDay = false,
             startTime = LocalTime.of(18, 0),
+            endDay = day,
             endTime = LocalTime.of(20, 30),
+            isAllDay = false,
             location = "  ",
             category = EventCategory.WORK,
             recurrence = null,
@@ -79,16 +79,126 @@ class NewCalendarEventDraftFactoryTest {
     }
 
     @Test
+    fun `trims description and turns blank description into null`() {
+        val day = LocalDate.of(2026, 8, 3)
+
+        val withDescription = buildNewCalendarEvent(
+            title = "Kino",
+            startDay = day,
+            startTime = LocalTime.of(18, 0),
+            endDay = day,
+            endTime = LocalTime.of(20, 30),
+            isAllDay = false,
+            location = null,
+            category = EventCategory.PRIVATE,
+            recurrence = null,
+            blocksSharedFreeTime = true,
+            description = "  Popcorn nicht vergessen  ",
+        )
+        assertEquals("Popcorn nicht vergessen", withDescription.description)
+
+        val withBlankDescription = buildNewCalendarEvent(
+            title = "Kino",
+            startDay = day,
+            startTime = LocalTime.of(18, 0),
+            endDay = day,
+            endTime = LocalTime.of(20, 30),
+            isAllDay = false,
+            location = null,
+            category = EventCategory.PRIVATE,
+            recurrence = null,
+            blocksSharedFreeTime = true,
+            description = "   ",
+        )
+        assertEquals(null, withBlankDescription.description)
+
+        val withoutDescription = buildNewCalendarEvent(
+            title = "Kino",
+            startDay = day,
+            startTime = LocalTime.of(18, 0),
+            endDay = day,
+            endTime = LocalTime.of(20, 30),
+            isAllDay = false,
+            location = null,
+            category = EventCategory.PRIVATE,
+            recurrence = null,
+            blocksSharedFreeTime = true,
+        )
+        assertEquals(null, withoutDescription.description)
+    }
+
+    @Test
+    fun `builds timed event spanning three calendar days`() {
+        val event = buildNewCalendarEvent(
+            title = "Wochenendtrip",
+            startDay = LocalDate.of(2026, 8, 1),
+            startTime = LocalTime.of(18, 0),
+            endDay = LocalDate.of(2026, 8, 3),
+            endTime = LocalTime.of(10, 0),
+            isAllDay = false,
+            location = null,
+            category = EventCategory.TOGETHER,
+            recurrence = null,
+            blocksSharedFreeTime = false,
+        )
+
+        assertEquals(LocalDateTime.of(2026, 8, 1, 18, 0), event.start)
+        assertEquals(LocalDateTime.of(2026, 8, 3, 10, 0), event.end)
+    }
+
+    @Test
+    fun `rejects timed end date before start date`() {
+        val exception = assertThrows(IllegalArgumentException::class.java) {
+            buildNewCalendarEvent(
+                title = "Rückwärts",
+                startDay = LocalDate.of(2026, 8, 3),
+                startTime = LocalTime.of(10, 0),
+                endDay = LocalDate.of(2026, 8, 1),
+                endTime = LocalTime.of(18, 0),
+                isAllDay = false,
+                location = null,
+                category = EventCategory.PRIVATE,
+                recurrence = null,
+                blocksSharedFreeTime = false,
+            )
+        }
+
+        assertEquals("Das Ende muss nach dem Beginn liegen.", exception.message)
+    }
+
+    @Test
+    fun `rejects timed end not after start on same day`() {
+        val day = LocalDate.of(2026, 8, 3)
+
+        listOf(LocalTime.of(10, 0), LocalTime.of(9, 0)).forEach { endTime ->
+            assertThrows(IllegalArgumentException::class.java) {
+                buildNewCalendarEvent(
+                    title = "Ungültig",
+                    startDay = day,
+                    startTime = LocalTime.of(10, 0),
+                    endDay = day,
+                    endTime = endTime,
+                    isAllDay = false,
+                    location = null,
+                    category = EventCategory.PRIVATE,
+                    recurrence = null,
+                    blocksSharedFreeTime = false,
+                )
+            }
+        }
+    }
+
+    @Test
     fun `private event does not invite partner`() {
         val day = LocalDate.of(2026, 8, 3)
 
         val event = buildNewCalendarEvent(
             title = "Sport",
             startDay = day,
-            endDayInclusive = day,
-            isAllDay = false,
             startTime = LocalTime.of(18, 0),
+            endDay = day,
             endTime = LocalTime.of(19, 0),
+            isAllDay = false,
             location = null,
             category = EventCategory.PRIVATE,
             recurrence = null,

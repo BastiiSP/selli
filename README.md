@@ -11,7 +11,7 @@ Vollständiges Projekt- und Designkonzept liegt in Bastis privatem Obsidian-Vaul
 ## Setup
 
 1. Projekt in Android Studio öffnen (Gradle-Sync läuft beim ersten Öffnen automatisch)
-2. `local.properties` lokal um die benötigten, nicht versionierten Werte ergänzen (Google-OAuth-Client-Konfiguration, ICS-Feed-URL)
+2. `local.properties` lokal um die benötigten, nicht versionierten Werte ergänzen (Google-OAuth-Client-Konfiguration, ICS-Feed-URLs, Places-API-Schlüssel)
 3. Build & Run über Android Studio oder `./gradlew assembleDebug`
 
 ### Lokale Konfiguration
@@ -21,7 +21,27 @@ Diese Werte gehören lokal in `local.properties` und werden als `BuildConfig`-Fe
 ```properties
 selli.googleServerClientId=...
 selli.icsFeedUrl=...
+selli.melliIcsFeedUrl=...
+selli.placesApiKey=...
 ```
+
+#### Places-API-Schlüssel
+
+`selli.placesApiKey` speist die Adressvorschläge im Ortsfeld. Der Schlüssel braucht in der
+Google Cloud Console die **Places API (New)** und ist auf Android-Apps beschränkt. In der
+Schlüssel-Restriktion müssen Paketname und Signatur-Fingerabdruck eingetragen sein:
+
+- Paketname: `com.prehmus.selli`
+- SHA-1 des verwendeten Keystores — für Debug-Builds:
+  `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`
+
+Ein Release-Build mit anderem Keystore braucht einen **zusätzlichen** Eintrag in derselben
+Restriktion, sonst antwortet die API mit `403 PERMISSION_DENIED`. Die App liest Paketname und
+Fingerabdruck zur Laufzeit aus der eigenen Signatur (`data/places/AndroidAppIdentity.kt`) und
+schickt sie als `X-Android-Package`/`X-Android-Cert` mit — hartkodiert ist nichts.
+
+Fehlt der Schlüssel oder ist er ungültig, bleibt das Ortsfeld ein normales Textfeld ohne
+Vorschläge; Termine lassen sich weiterhin uneingeschränkt speichern.
 
 ## Konventionen
 

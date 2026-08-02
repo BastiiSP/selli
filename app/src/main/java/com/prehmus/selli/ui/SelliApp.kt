@@ -68,6 +68,7 @@ fun SelliApp(
                 CalendarScreen(
                     viewModel = calendarViewModel,
                     onSwitchAccount = authViewModel::switchAccount,
+                    suggestionRepository = dependencies.placeSuggestionRepository,
                 )
             }
             else -> SignInScreen(

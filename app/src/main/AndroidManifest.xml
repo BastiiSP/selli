@@ -4,6 +4,19 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!--
+        Ab Android 11 sieht eine App fremde Pakete nur noch, wenn sie sie hier nennt.
+        Ohne diesen Eintrag schlägt der direkte Maps-Intent im Termin-Detail immer fehl
+        und es griffe nur der geo:-/Web-Fallback.
+    -->
+    <queries>
+        <package android:name="com.google.android.apps.maps" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="geo" />
+        </intent>
+    </queries>
+
     <application
         android:name=".SelliApplication"
         android:allowBackup="true"

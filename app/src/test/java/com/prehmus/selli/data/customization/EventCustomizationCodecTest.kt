@@ -27,6 +27,7 @@ class EventCustomizationCodecTest {
                 overrides = EventFieldOverrides(
                     title = "Changed \"title\"",
                     date = LocalDate.of(2026, 7, 20),
+                    endDate = LocalDate.of(2026, 7, 22),
                     startTime = LocalTime.of(14, 30),
                     endTime = LocalTime.of(16, 0),
                     location = "Berlin\nHbf",
@@ -76,5 +77,30 @@ class EventCustomizationCodecTest {
         val customization = codec.decode(legacyJson).single()
 
         assertNull(customization.overrides.blocksSharedFreeTime)
+    }
+
+    @Test
+    fun `decodes version one customization without end date as unspecified`() {
+        val legacyJson = """
+            {
+              "version": 1,
+              "customizations": [
+                {
+                  "targetType": "occurrence",
+                  "source": "GOOGLE_OWN",
+                  "eventId": "legacy-event",
+                  "hidden": false,
+                  "date": "2026-07-20",
+                  "startTime": "14:30",
+                  "endTime": "16:00",
+                  "label": "Alter Termin"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val customization = codec.decode(legacyJson).single()
+
+        assertNull(customization.overrides.endDate)
     }
 }

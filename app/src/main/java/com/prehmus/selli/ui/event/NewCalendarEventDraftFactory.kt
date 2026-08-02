@@ -7,37 +7,41 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 /**
- * Übersetzt die inklusiven Formulardaten in Sellis/Googles exklusiven Endzeitpunkt.
+ * Übersetzt Formulardaten in Sellis/Googles Endzeitpunkt.
+ * Bei ganztägigen Terminen ist der gewählte Endtag inklusiv.
  * Die Funktion ist UI-frameworkfrei, damit die Datumsgrenzen direkt testbar bleiben.
  */
 internal fun buildNewCalendarEvent(
     title: String,
     startDay: LocalDate,
-    endDayInclusive: LocalDate,
-    isAllDay: Boolean,
     startTime: LocalTime,
+    endDay: LocalDate,
     endTime: LocalTime,
+    isAllDay: Boolean,
     location: String?,
     category: EventCategory,
     recurrence: EventRecurrence?,
     blocksSharedFreeTime: Boolean,
+    description: String? = null,
 ): NewCalendarEvent {
     val normalizedTitle = title.trim()
     require(normalizedTitle.isNotEmpty()) { "Der Titel darf nicht leer sein." }
 
     val start = if (isAllDay) {
-        require(!endDayInclusive.isBefore(startDay)) {
+        require(!endDay.isBefore(startDay)) {
             "Der Endtag darf nicht vor dem Starttag liegen."
         }
         startDay.atStartOfDay()
     } else {
-        require(endTime.isAfter(startTime)) { "Das Ende muss nach dem Beginn liegen." }
         startDay.atTime(startTime)
     }
     val end = if (isAllDay) {
-        endDayInclusive.plusDays(1).atStartOfDay()
+        endDay.plusDays(1).atStartOfDay()
     } else {
-        startDay.atTime(endTime)
+        endDay.atTime(endTime)
+    }
+    if (!isAllDay) {
+        require(end.isAfter(start)) { "Das Ende muss nach dem Beginn liegen." }
     }
 
     return NewCalendarEvent(
@@ -46,6 +50,7 @@ internal fun buildNewCalendarEvent(
         end = end,
         isAllDay = isAllDay,
         location = location?.trim()?.ifBlank { null },
+        description = description?.trim()?.ifBlank { null },
         invitePartner = category == EventCategory.TOGETHER,
         recurrence = recurrence,
         blocksSharedFreeTime = isAllDay && blocksSharedFreeTime,

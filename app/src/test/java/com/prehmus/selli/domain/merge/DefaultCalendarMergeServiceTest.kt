@@ -434,6 +434,87 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
+    fun mergedEvents_usesExplicitEndDateForTimedOccurrenceOverride() = runTest {
+        val original = event(
+            id = "multi-day-occurrence",
+            start = testDay.atTime(10, 0),
+            end = testDay.plusDays(1).atTime(11, 0),
+        )
+        val overriddenStartDay = testDay.plusDays(2)
+        val overriddenEndDay = testDay.plusDays(5)
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(
+                        date = overriddenStartDay,
+                        endDate = overriddenEndDay,
+                        startTime = java.time.LocalTime.of(14, 30),
+                    ),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals(overriddenStartDay.atTime(14, 30), customized.start)
+        assertEquals(overriddenEndDay.atTime(11, 0), customized.end)
+    }
+
+    @Test
+    fun mergedEvents_preservesOriginalDayOffsetWithoutEndDateOverride() = runTest {
+        val original = event(
+            id = "offset-occurrence",
+            start = testDay.atTime(18, 0),
+            end = testDay.plusDays(2).atTime(10, 0),
+        )
+        val overriddenStartDay = testDay.plusDays(4)
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
+                    overrides = EventFieldOverrides(date = overriddenStartDay),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals(overriddenStartDay.atTime(18, 0), customized.start)
+        assertEquals(overriddenStartDay.plusDays(2).atTime(10, 0), customized.end)
+    }
+
+    @Test
+    fun mergedEvents_preservesOriginalDayOffsetForSeriesTimeOverrideWithoutEndDate() = runTest {
+        val original = event(
+            id = "series-offset",
+            start = testDay.atTime(18, 0),
+            end = testDay.plusDays(2).atTime(10, 0),
+            seriesId = "multi-day-series",
+        )
+        val service = service(
+            googleEvents = listOf(original),
+            customizations = listOf(
+                customization(
+                    target = CustomizationTarget.SeriesFrom(
+                        source = original.source,
+                        seriesId = requireNotNull(original.seriesId),
+                        fromStart = original.start,
+                    ),
+                    overrides = EventFieldOverrides(
+                        date = testDay.plusDays(10),
+                        startTime = java.time.LocalTime.of(19, 30),
+                    ),
+                ),
+            ),
+        )
+
+        val customized = service.mergedEvents(testRange).single()
+        assertEquals(testDay.atTime(19, 30), customized.start)
+        assertEquals(testDay.plusDays(2).atTime(10, 0), customized.end)
+    }
+
+    @Test
     fun mergedEvents_usesLatestMatchingSeriesCustomizationAndIgnoresItsDate() = runTest {
         val occurrence = event(id = "occurrence", start = dateTime(hour = 12), seriesId = "series")
         val service = service(
@@ -511,7 +592,7 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun mergedEvents_movesAllDayDatesAndIgnoresTimeOverrides() = runTest {
+    fun mergedEvents_movesAllDayDatesAndIgnoresTimedEndOverrides() = runTest {
         val original = event(
             id = "all-day",
             start = testDay.atStartOfDay(),
@@ -526,6 +607,7 @@ class DefaultCalendarMergeServiceTest {
                     target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
                     overrides = EventFieldOverrides(
                         date = newDay,
+                        endDate = newDay.plusDays(10),
                         startTime = java.time.LocalTime.NOON,
                         endTime = java.time.LocalTime.of(13, 0),
                     ),
@@ -540,7 +622,7 @@ class DefaultCalendarMergeServiceTest {
     }
 
     @Test
-    fun mergedEvents_doesNotMarkAllDayEventCustomizedForIgnoredTimeOverridesOnly() = runTest {
+    fun mergedEvents_doesNotMarkAllDayEventCustomizedForIgnoredTimedFieldsOnly() = runTest {
         val original = event(
             id = "all-day",
             start = testDay.atStartOfDay(),
@@ -552,7 +634,10 @@ class DefaultCalendarMergeServiceTest {
             customizations = listOf(
                 customization(
                     target = CustomizationTarget.Occurrence(EventKey(original.source, original.id)),
-                    overrides = EventFieldOverrides(startTime = java.time.LocalTime.NOON),
+                    overrides = EventFieldOverrides(
+                        endDate = testDay.plusDays(10),
+                        startTime = java.time.LocalTime.NOON,
+                    ),
                 ),
             ),
         )

@@ -1,5 +1,6 @@
 package com.prehmus.selli.domain.model
 
+import java.time.LocalDate
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -13,6 +14,11 @@ class EventCustomizationTest {
     @Test
     fun `field overrides are not empty when a field is set`() {
         assertFalse(EventFieldOverrides(title = "Changed").isEmpty())
+    }
+
+    @Test
+    fun `field overrides are not empty when only end date is set`() {
+        assertFalse(EventFieldOverrides(endDate = LocalDate.of(2026, 8, 3)).isEmpty())
     }
 
     @Test

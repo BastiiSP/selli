@@ -151,7 +151,10 @@ class DefaultCalendarMergeService(
         val hasFieldOverride =
             overrides.title != null ||
                 (allowDateOverride && overrides.date != null) ||
-                (!isAllDay && (overrides.startTime != null || overrides.endTime != null)) ||
+                (!isAllDay &&
+                    (overrides.endDate != null ||
+                        overrides.startTime != null ||
+                        overrides.endTime != null)) ||
                 overrides.location != null ||
                 overrides.description != null
         val hasCategoryOverride = overrides.category != null
@@ -182,7 +185,8 @@ class DefaultCalendarMergeService(
                     end.toLocalDate().atStartOfDay(),
                 ).toDays()
                 newStart = startDate.atTime(overrides.startTime ?: start.toLocalTime())
-                newEnd = startDate.plusDays(endDayOffset).atTime(overrides.endTime ?: end.toLocalTime())
+                val endDate = overrides.endDate ?: startDate.plusDays(endDayOffset)
+                newEnd = endDate.atTime(overrides.endTime ?: end.toLocalTime())
             }
         }
 

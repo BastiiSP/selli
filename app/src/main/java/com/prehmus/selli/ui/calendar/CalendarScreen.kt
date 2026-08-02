@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
 import com.prehmus.selli.domain.model.SourceLoadError
+import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.ui.settings.rememberLayoutPreferences
 import com.prehmus.selli.ui.event.CreateEventSheet
 import com.prehmus.selli.ui.event.CustomizationManagerSheet
@@ -68,6 +69,8 @@ fun CalendarScreen(
     viewModel: CalendarViewModel,
     onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier,
+    // Adressvorschläge fürs Ortsfeld der Sheets; null = reines Textfeld (Previews/Tests).
+    suggestionRepository: PlaceSuggestionRepository? = null,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -278,6 +281,7 @@ fun CalendarScreen(
             initialStartTime = prefill?.startTime,
             initialEndTime = prefill?.endTime,
             initialCategory = prefill?.category,
+            suggestionRepository = suggestionRepository,
         )
     }
 
@@ -299,6 +303,7 @@ fun CalendarScreen(
             seriesScope = uiState.isEditingSeries,
             onSave = viewModel::saveEventOverrides,
             onDismiss = viewModel::dismissEditing,
+            suggestionRepository = suggestionRepository,
         )
     }
 

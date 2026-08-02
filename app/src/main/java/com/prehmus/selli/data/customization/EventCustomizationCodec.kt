@@ -46,6 +46,7 @@ class EventCustomizationCodec(
             hidden = hidden,
             title = overrides.title,
             date = overrides.date?.toString(),
+            endDate = overrides.endDate?.toString(),
             startTime = overrides.startTime?.toString(),
             endTime = overrides.endTime?.toString(),
             location = overrides.location,
@@ -80,6 +81,7 @@ class EventCustomizationCodec(
             overrides = EventFieldOverrides(
                 title = title,
                 date = date?.let { value -> LocalDate.parse(value) },
+                endDate = endDate?.let { value -> LocalDate.parse(value) },
                 startTime = startTime?.let { value -> LocalTime.parse(value) },
                 endTime = endTime?.let { value -> LocalTime.parse(value) },
                 location = location,
@@ -105,6 +107,7 @@ class EventCustomizationCodec(
         val hidden: Boolean,
         val title: String?,
         val date: String?,
+        val endDate: String?,
         val startTime: String?,
         val endTime: String?,
         val location: String?,

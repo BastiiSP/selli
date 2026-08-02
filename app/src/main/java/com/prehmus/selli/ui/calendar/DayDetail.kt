@@ -25,7 +25,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.format.EventTimeFormatter
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.ui.components.CategoryChip
@@ -38,7 +40,6 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-private val TimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
 private val DayTitleFormat = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)
 
 /** Tagesdetail unter dem Grid — wie im Outlook-Kalender, nur weicher. */
@@ -176,14 +177,21 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
                                 // Serien-Vorkommen: kleines Wiederholungszeichen vor der Zeit.
                                 append("↻  ")
                             }
+                            // Tagesübergreifende Termine nennen zusätzlich die Tage —
+                            // die Formatierung liegt zentral in EventTimeFormatter.
                             append(
-                                if (event.isAllDay) "Ganztägig"
-                                else "${event.start.toLocalTime().format(TimeFormat)} – ${event.end.toLocalTime().format(TimeFormat)}"
+                                EventTimeFormatter
+                                    .formatRange(event.start, event.end, event.isAllDay)
+                                    .replaceFirstChar { it.uppercase(Locale.GERMAN) },
                             )
                             event.location?.takeIf { it.isNotBlank() }?.let { append("  ·  $it") }
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // Mehrtägige Termine werden länger — höchstens zwei Zeilen, damit
+                        // die Karten in der Liste nicht ungleich hoch werden.
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
                     )
                 }
             }

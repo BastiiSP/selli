@@ -37,12 +37,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.EventFieldOverrides
+import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
+import com.prehmus.selli.ui.components.LocationAutocompleteField
+import com.prehmus.selli.ui.components.scrollIntoViewOnFocus
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 private val EditDateFormat = DateTimeFormatter.ofPattern("EEE, d. MMMM yyyy", Locale.GERMAN)
@@ -62,20 +67,32 @@ fun EditEventSheet(
     seriesScope: Boolean,
     onSave: (EventFieldOverrides) -> Unit,
     onDismiss: () -> Unit,
+    suggestionRepository: PlaceSuggestionRepository? = null,
 ) {
     var title by rememberSaveable { mutableStateOf(event.title) }
     var location by rememberSaveable { mutableStateOf(event.location.orEmpty()) }
     var description by rememberSaveable { mutableStateOf(event.description.orEmpty()) }
     var day by remember { mutableStateOf(event.start.toLocalDate()) }
+    // Enddatum nur für einzelne, getimte Vorkommen — bei Serien trägt die Merge-Logik
+    // das Tages-Offset weiter, deshalb bleibt das Datum dort fixiert.
+    var endDay by remember { mutableStateOf(event.end.toLocalDate()) }
     var startTime by remember { mutableStateOf(event.start.toLocalTime()) }
     var endTime by remember { mutableStateOf(event.end.toLocalTime()) }
     var blocksSharedFreeTime by rememberSaveable(event.id, event.blocksSharedFreeTime) {
         mutableStateOf(event.blocksSharedFreeTime)
     }
-    var showDatePicker by remember { mutableStateOf(false) }
+    var datePickerTarget by remember { mutableStateOf<EditDateTarget?>(null) }
     var timePickerTarget by remember { mutableStateOf<EditTimeTarget?>(null) }
 
-    val isValid = title.isNotBlank() && (event.isAllDay || endTime.isAfter(startTime))
+    // Ein tagesübergreifender Serientermin (z. B. 22:00–02:00) darf beim
+    // Serien-Anpassen nicht an der Uhrzeit-Prüfung hängen bleiben.
+    val originalSpansDays = event.end.toLocalDate() != event.start.toLocalDate()
+    val isTimeRangeValid = when {
+        event.isAllDay -> true
+        seriesScope -> originalSpansDays || endTime.isAfter(startTime)
+        else -> endDay.atTime(endTime).isAfter(day.atTime(startTime))
+    }
+    val isValid = title.isNotBlank() && isTimeRangeValid
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -107,48 +124,70 @@ fun EditEventSheet(
                 onValueChange = { title = it },
                 label = { Text("Titel") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scrollIntoViewOnFocus(),
             )
 
-            if (!seriesScope) {
-                OutlinedButton(onClick = { showDatePicker = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(day.format(EditDateFormat))
-                }
-            }
-
-            if (!event.isAllDay) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (event.isAllDay) {
+                if (!seriesScope) {
                     OutlinedButton(
-                        onClick = { timePickerTarget = EditTimeTarget.START },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Von ${startTime.format(EditTimeFormat)}") }
-                    OutlinedButton(
-                        onClick = { timePickerTarget = EditTimeTarget.END },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Bis ${endTime.format(EditTimeFormat)}") }
+                        onClick = { datePickerTarget = EditDateTarget.START },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(day.format(EditDateFormat))
+                    }
                 }
-                if (!endTime.isAfter(startTime)) {
-                    Text(
-                        text = "Das Ende muss nach dem Beginn liegen.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            } else {
                 LabeledSwitch(
                     label = "Zählt als beschäftigt",
                     checked = blocksSharedFreeTime,
                     onCheckedChange = { blocksSharedFreeTime = it },
                     description = "Blockiert eure gemeinsame Frei-Zeit-Anzeige – unabhängig von der Kategorie.",
                 )
+            } else {
+                if (seriesScope) {
+                    // Serie: nur die Uhrzeiten — das Tages-Offset der Serie bleibt erhalten.
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedButton(
+                            onClick = { timePickerTarget = EditTimeTarget.START },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Von ${startTime.format(EditTimeFormat)}") }
+                        OutlinedButton(
+                            onClick = { timePickerTarget = EditTimeTarget.END },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Bis ${endTime.format(EditTimeFormat)}") }
+                    }
+                } else {
+                    // Einzelvorkommen: Beginn und Ende je mit eigenem Datum, damit ein
+                    // Termin auch über Mitternacht hinausreichen darf.
+                    DateTimeRow(
+                        label = "Von",
+                        day = day,
+                        time = startTime,
+                        onPickDay = { datePickerTarget = EditDateTarget.START },
+                        onPickTime = { timePickerTarget = EditTimeTarget.START },
+                    )
+                    DateTimeRow(
+                        label = "Bis",
+                        day = endDay,
+                        time = endTime,
+                        onPickDay = { datePickerTarget = EditDateTarget.END },
+                        onPickTime = { timePickerTarget = EditTimeTarget.END },
+                    )
+                }
+                if (!isTimeRangeValid) {
+                    Text(
+                        text = "Das Ende muss nach dem Beginn liegen.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
 
-            OutlinedTextField(
+            LocationAutocompleteField(
                 value = location,
                 onValueChange = { location = it },
-                label = { Text("Ort (optional)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                suggestionRepository = suggestionRepository,
             )
 
             OutlinedTextField(
@@ -156,7 +195,9 @@ fun EditEventSheet(
                 onValueChange = { description = it },
                 label = { Text("Beschreibung (optional)") },
                 minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scrollIntoViewOnFocus(),
             )
 
             Button(
@@ -165,6 +206,9 @@ fun EditEventSheet(
                         EventFieldOverrides(
                             title = title.trim().takeIf { it.isNotBlank() && it != event.title },
                             date = day.takeIf { !seriesScope && it != event.start.toLocalDate() },
+                            endDate = endDay.takeIf {
+                                !seriesScope && !event.isAllDay && it != event.end.toLocalDate()
+                            },
                             startTime = startTime.takeIf { !event.isAllDay && it != event.start.toLocalTime() },
                             endTime = endTime.takeIf { !event.isAllDay && it != event.end.toLocalTime() },
                             location = location.trim().takeIf { it != event.location.orEmpty() },
@@ -198,22 +242,33 @@ fun EditEventSheet(
         }
     }
 
-    if (showDatePicker) {
+    datePickerTarget?.let { target ->
+        val initialDayForTarget = if (target == EditDateTarget.START) day else endDay
         val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = day.atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
+            initialSelectedDateMillis = initialDayForTarget
+                .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
         )
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = { datePickerTarget = null },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        day = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        val selected = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
+                        when (target) {
+                            EditDateTarget.START -> {
+                                // Getimt: das Enddatum wandert mit, die Dauer bleibt erhalten.
+                                val dayOffset = ChronoUnit.DAYS.between(day, endDay)
+                                day = selected
+                                if (!event.isAllDay) endDay = selected.plusDays(dayOffset)
+                            }
+                            EditDateTarget.END -> endDay = selected
+                        }
                     }
-                    showDatePicker = false
+                    datePickerTarget = null
                 }) { Text("OK") }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Abbrechen") }
+                TextButton(onClick = { datePickerTarget = null }) { Text("Abbrechen") }
             },
         ) {
             DatePicker(state = datePickerState)
@@ -237,10 +292,23 @@ fun EditEventSheet(
                     val picked = LocalTime.of(timeState.hour, timeState.minute)
                     when (target) {
                         EditTimeTarget.START -> {
-                            // Termindauer beim Verschieben des Beginns beibehalten.
-                            val duration = java.time.Duration.between(startTime, endTime)
-                            startTime = picked
-                            endTime = picked.plus(duration)
+                            // Termindauer beim Verschieben des Beginns beibehalten. Bei
+                            // Serien bleibt es bei der reinen Uhrzeit (das Tages-Offset
+                            // trägt die Merge-Logik), sonst über den vollen Zeitpunkt.
+                            if (seriesScope) {
+                                val duration = Duration.between(startTime, endTime)
+                                startTime = picked
+                                endTime = picked.plus(duration)
+                            } else {
+                                val duration = Duration.between(
+                                    day.atTime(startTime),
+                                    endDay.atTime(endTime),
+                                )
+                                val newEnd = day.atTime(picked).plus(duration)
+                                startTime = picked
+                                endDay = newEnd.toLocalDate()
+                                endTime = newEnd.toLocalTime()
+                            }
                         }
                         EditTimeTarget.END -> endTime = picked
                     }
@@ -253,5 +321,7 @@ fun EditEventSheet(
         )
     }
 }
+
+private enum class EditDateTarget { START, END }
 
 private enum class EditTimeTarget { START, END }

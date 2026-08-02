@@ -4,11 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -38,23 +40,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventRecurrence
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.RecurrenceFrequency
+import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.ui.components.CategorySelector
+import com.prehmus.selli.ui.components.LocationAutocompleteField
+import com.prehmus.selli.ui.components.scrollIntoViewOnFocus
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.selliGradient
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 
 private val DateFormat = DateTimeFormatter.ofPattern("EEE, d. MMMM yyyy", Locale.GERMAN)
+
+/** Kurzform fürs Datum, wenn Datum und Uhrzeit sich eine Zeile teilen. */
+private val CompactDateFormat = DateTimeFormatter.ofPattern("EEE, d. MMM yyyy", Locale.GERMAN)
 private val TimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
 private val LocalDateSaver = Saver<LocalDate, Long>(
     save = { date -> date.toEpochDay() },
@@ -76,16 +87,20 @@ fun CreateEventSheet(
     initialStartTime: LocalTime? = null,
     initialEndTime: LocalTime? = null,
     initialCategory: EventCategory? = null,
+    suggestionRepository: PlaceSuggestionRepository? = null,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
     var location by rememberSaveable { mutableStateOf("") }
+    var description by rememberSaveable { mutableStateOf("") }
     var isAllDay by rememberSaveable { mutableStateOf(false) }
     var blocksSharedFreeTime by rememberSaveable { mutableStateOf(true) }
     var category by remember { mutableStateOf(initialCategory ?: EventCategory.PRIVATE) }
     var startDay by rememberSaveable(stateSaver = LocalDateSaver) {
         mutableStateOf(initialDay)
     }
-    var endDayInclusive by rememberSaveable(stateSaver = LocalDateSaver) {
+    // Ein gemeinsamer Endtag für beide Fälle: ganztägig ist er der letzte (inklusive)
+    // Tag, getimt das Datum der Endzeit. So bleibt der Ganztägig-Schalter verlustfrei.
+    var endDay by rememberSaveable(stateSaver = LocalDateSaver) {
         mutableStateOf(initialDay)
     }
     var startTime by remember { mutableStateOf(initialStartTime ?: LocalTime.of(18, 0)) }
@@ -99,10 +114,13 @@ fun CreateEventSheet(
 
     val isRecurrenceValid = recurrenceFrequency == null ||
         recurrenceUntil == null || !recurrenceUntil!!.isBefore(startDay)
-    val isDateRangeValid = !isAllDay || !endDayInclusive.isBefore(startDay)
+    val isDateRangeValid = !isAllDay || !endDay.isBefore(startDay)
+    // Getimte Termine dürfen über Mitternacht laufen — geprüft wird deshalb der
+    // vollständige Zeitpunkt aus Datum und Uhrzeit, nicht mehr nur die Uhrzeit.
+    val isTimeRangeValid = isAllDay || endDay.atTime(endTime).isAfter(startDay.atTime(startTime))
     val isValid =
         title.isNotBlank() &&
-            (isAllDay || endTime.isAfter(startTime)) &&
+            isTimeRangeValid &&
             isDateRangeValid &&
             isRecurrenceValid
 
@@ -124,7 +142,9 @@ fun CreateEventSheet(
                 onValueChange = { title = it },
                 label = { Text("Titel") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scrollIntoViewOnFocus(),
             )
 
             Text(
@@ -139,8 +159,14 @@ fun CreateEventSheet(
                 checked = isAllDay,
                 onCheckedChange = { enabled ->
                     isAllDay = enabled
-                    if (enabled && endDayInclusive.isBefore(startDay)) {
-                        endDayInclusive = startDay
+                    // In beiden Richtungen darf der Endtag nie vor dem Starttag landen.
+                    if (endDay.isBefore(startDay)) {
+                        endDay = startDay
+                    }
+                    // Getimt: gleicher Tag, aber Ende vor Beginn wäre ungültig — geraderücken.
+                    if (!enabled && endDay == startDay && !endTime.isAfter(startTime)) {
+                        endTime = startTime.plusHours(1)
+                        if (!endTime.isAfter(startTime)) endDay = startDay.plusDays(1)
                     }
                 },
             )
@@ -156,7 +182,7 @@ fun CreateEventSheet(
                     onClick = { datePickerTarget = DateTarget.END },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text("Bis einschließlich ${endDayInclusive.format(DateFormat)}")
+                    Text("Bis einschließlich ${endDay.format(DateFormat)}")
                 }
                 if (!isDateRangeValid) {
                     Text(
@@ -172,23 +198,23 @@ fun CreateEventSheet(
                     description = "Blockiert eure gemeinsame Frei-Zeit-Anzeige – unabhängig von der Kategorie.",
                 )
             } else {
-                OutlinedButton(
-                    onClick = { datePickerTarget = DateTarget.START },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(startDay.format(DateFormat))
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedButton(
-                        onClick = { timePickerTarget = TimeTarget.START },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Von ${startTime.format(TimeFormat)}") }
-                    OutlinedButton(
-                        onClick = { timePickerTarget = TimeTarget.END },
-                        modifier = Modifier.weight(1f),
-                    ) { Text("Bis ${endTime.format(TimeFormat)}") }
-                }
-                if (!endTime.isAfter(startTime)) {
+                // Beginn und Ende bekommen je eine eigene Zeile mit Datum UND Uhrzeit,
+                // damit ein Termin auch über Mitternacht hinausreichen kann.
+                DateTimeRow(
+                    label = "Von",
+                    day = startDay,
+                    time = startTime,
+                    onPickDay = { datePickerTarget = DateTarget.START },
+                    onPickTime = { timePickerTarget = TimeTarget.START },
+                )
+                DateTimeRow(
+                    label = "Bis",
+                    day = endDay,
+                    time = endTime,
+                    onPickDay = { datePickerTarget = DateTarget.END },
+                    onPickTime = { timePickerTarget = TimeTarget.END },
+                )
+                if (!isTimeRangeValid) {
                     Text(
                         text = "Das Ende muss nach dem Beginn liegen.",
                         style = MaterialTheme.typography.bodySmall,
@@ -197,12 +223,20 @@ fun CreateEventSheet(
                 }
             }
 
-            OutlinedTextField(
+            LocationAutocompleteField(
                 value = location,
                 onValueChange = { location = it },
-                label = { Text("Ort (optional)") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                suggestionRepository = suggestionRepository,
+            )
+
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text("Beschreibung (optional)") },
+                minLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .scrollIntoViewOnFocus(),
             )
 
             RecurrencePicker(
@@ -229,16 +263,17 @@ fun CreateEventSheet(
                         buildNewCalendarEvent(
                             title = title,
                             startDay = startDay,
-                            endDayInclusive = endDayInclusive,
-                            isAllDay = isAllDay,
                             startTime = startTime,
+                            endDay = endDay,
                             endTime = endTime,
+                            isAllDay = isAllDay,
                             location = location,
                             category = category,
                             recurrence = recurrenceFrequency?.let {
                                 EventRecurrence(frequency = it, until = recurrenceUntil)
                             },
                             blocksSharedFreeTime = blocksSharedFreeTime,
+                            description = description,
                         ),
                         category,
                     )
@@ -291,7 +326,7 @@ fun CreateEventSheet(
 
     datePickerTarget?.let { target ->
         val initialDayForTarget =
-            if (target == DateTarget.START) startDay else endDayInclusive
+            if (target == DateTarget.START) startDay else endDay
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = initialDayForTarget
                 .atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli(),
@@ -304,12 +339,18 @@ fun CreateEventSheet(
                         val selected = Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()
                         when (target) {
                             DateTarget.START -> {
-                                startDay = selected
-                                if (endDayInclusive.isBefore(selected)) {
-                                    endDayInclusive = selected
+                                if (isAllDay) {
+                                    startDay = selected
+                                    if (endDay.isBefore(selected)) endDay = selected
+                                } else {
+                                    // Getimt: der Endtag wandert mit, die Dauer bleibt erhalten
+                                    // (wie beim Verschieben der Beginn-Uhrzeit).
+                                    val dayOffset = ChronoUnit.DAYS.between(startDay, endDay)
+                                    startDay = selected
+                                    endDay = selected.plusDays(dayOffset)
                                 }
                             }
-                            DateTarget.END -> endDayInclusive = selected
+                            DateTarget.END -> endDay = selected
                         }
                     }
                     datePickerTarget = null
@@ -340,10 +381,17 @@ fun CreateEventSheet(
                     val picked = LocalTime.of(timeState.hour, timeState.minute)
                     when (target) {
                         TimeTarget.START -> {
-                            // Termindauer beim Verschieben des Beginns beibehalten.
-                            val duration = java.time.Duration.between(startTime, endTime)
+                            // Termindauer beim Verschieben des Beginns beibehalten —
+                            // über den vollen Zeitpunkt, damit auch Termine über
+                            // Mitternacht korrekt mitwandern.
+                            val duration = Duration.between(
+                                startDay.atTime(startTime),
+                                endDay.atTime(endTime),
+                            )
+                            val newEnd = startDay.atTime(picked).plus(duration)
                             startTime = picked
-                            endTime = picked.plus(duration)
+                            endDay = newEnd.toLocalDate()
+                            endTime = newEnd.toLocalTime()
                         }
                         TimeTarget.END -> endTime = picked
                     }
@@ -430,6 +478,53 @@ private fun RecurrencePicker(
 }
 
 private val UntilFormat = DateTimeFormatter.ofPattern("d.M.yyyy", Locale.GERMAN)
+
+/**
+ * Eine Zeile „Von"/„Bis" mit Datums- und Uhrzeit-Auswahl. Das Datum bekommt mehr
+ * Platz als die Uhrzeit; das Label steht davor, damit beide Buttons kurz bleiben.
+ * Wird von Anlegen- und Bearbeiten-Sheet geteilt.
+ */
+@Composable
+internal fun DateTimeRow(
+    label: String,
+    day: LocalDate,
+    time: LocalTime,
+    onPickDay: () -> Unit,
+    onPickTime: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val compactPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(34.dp),
+        )
+        OutlinedButton(
+            onClick = onPickDay,
+            contentPadding = compactPadding,
+            modifier = Modifier.weight(2f),
+        ) {
+            Text(
+                text = day.format(CompactDateFormat),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        OutlinedButton(
+            onClick = onPickTime,
+            contentPadding = compactPadding,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(text = time.format(TimeFormat), maxLines = 1)
+        }
+    }
+}
 
 @Composable
 internal fun LabeledSwitch(

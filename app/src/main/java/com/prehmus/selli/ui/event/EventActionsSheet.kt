@@ -1,5 +1,9 @@
 package com.prehmus.selli.ui.event
 
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -11,10 +15,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -28,7 +34,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.format.EventTimeFormatter
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.DeletionScope
@@ -39,7 +47,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val ActionsDayFormat = DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.GERMAN)
-private val ActionsTimeFormat = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
 
 /**
  * Aktionen-Sheet für einen angetippten Termin: lokal ausblenden oder anpassen.
@@ -58,6 +65,7 @@ fun EventActionsSheet(
     onDelete: (scope: DeletionScope) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     var pendingScopeAction by remember { mutableStateOf<ScopeAction?>(null) }
     // Bei Serien wird vor dem Umkategorisieren der Geltungsbereich erfragt.
     var pendingCategory by remember { mutableStateOf<EventCategory?>(null) }
@@ -91,20 +99,41 @@ fun EventActionsSheet(
                 )
                 PersonPill(person = event.owner, isSharedEvent = event.isSharedEvent)
             }
+            // Zeitangabe zentral über den EventTimeFormatter. Bei tagesübergreifenden
+            // Terminen nennt der Formatter die Tage schon selbst — dann entfällt der
+            // vorangestellte Wochentag, damit er nicht doppelt erscheint.
+            val spansDays = EventTimeFormatter.spansMultipleDays(
+                event.start,
+                event.end,
+                event.isAllDay,
+            )
+            val timeRange = EventTimeFormatter.formatRange(event.start, event.end, event.isAllDay)
             Text(
                 text = buildString {
-                    append(event.start.toLocalDate().format(ActionsDayFormat))
-                    if (!event.isAllDay) {
-                        append(", ${event.start.toLocalTime().format(ActionsTimeFormat)}")
-                        append(" – ${event.end.toLocalTime().format(ActionsTimeFormat)}")
+                    if (spansDays) {
+                        append(timeRange.replaceFirstChar { it.uppercase(Locale.GERMAN) })
                     } else {
-                        append(", ganztägig")
+                        append(event.start.toLocalDate().format(ActionsDayFormat))
+                        append(", $timeRange")
                     }
                     event.location?.takeIf { it.isNotBlank() }?.let { append("\n$it") }
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            // Ort vorhanden? Dann direkt darunter der Weg dorthin — unabhängig davon,
+            // aus welchem Kalender der Termin stammt.
+            event.location?.takeIf { it.isNotBlank() }?.let { location ->
+                FilledTonalButton(
+                    onClick = { openLocationInMaps(context, location) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Place, contentDescription = null)
+                    Text("In Google Maps öffnen", modifier = Modifier.padding(start = 8.dp))
+                }
+            }
+
             event.description?.takeIf { it.isNotBlank() }?.let {
                 Text(
                     text = it,
@@ -314,6 +343,34 @@ fun EventActionsSheet(
 }
 
 private enum class ScopeAction { EDIT, HIDE }
+
+/**
+ * Zeigt den Ort auf der Karte an — bewusst kein Navigations-/Routing-Intent. Der Tap
+ * soll nur den Punkt zeigen, alles Weitere (Umschauen, Route starten, anrufen) entscheidet
+ * die Person danach selbst in Maps. Reihenfolge: Google-Maps-App, dann eine beliebige
+ * installierte Karten-App (geo:), zuletzt Google Maps im Browser. Fehlt wirklich alles,
+ * passiert schlicht nichts — abstürzen darf die App dabei nie.
+ */
+private fun openLocationInMaps(context: Context, location: String) {
+    val destination = Uri.encode(location)
+    val candidates = listOf(
+        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$destination"))
+            .setPackage("com.google.android.apps.maps"),
+        Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$destination")),
+        Intent(
+            Intent.ACTION_VIEW,
+            Uri.parse("https://www.google.com/maps/search/?api=1&query=$destination"),
+        ),
+    )
+    for (intent in candidates) {
+        try {
+            context.startActivity(intent)
+            return
+        } catch (_: ActivityNotFoundException) {
+            // Nächste Variante versuchen.
+        }
+    }
+}
 
 /** Ohne Serie direkt ausführen, sonst erst den Geltungsbereich erfragen. */
 private fun resolveScope(

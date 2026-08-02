@@ -12,6 +12,7 @@ fun CalendarEvent.key(): EventKey = EventKey(source = source, eventId = id)
 data class EventFieldOverrides(
     val title: String? = null,
     val date: LocalDate? = null,
+    val endDate: LocalDate? = null,
     val startTime: LocalTime? = null,
     val endTime: LocalTime? = null,
     val location: String? = null,
@@ -23,6 +24,7 @@ data class EventFieldOverrides(
     fun isEmpty(): Boolean =
         title == null &&
             date == null &&
+            endDate == null &&
             startTime == null &&
             endTime == null &&
             location == null &&

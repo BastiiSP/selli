@@ -252,31 +252,35 @@ private fun NextSharedEventRow(event: CalendarEvent?, today: LocalDate) {
             }
         }
     } else {
-        Column(modifier = GlanceModifier.fillMaxWidth()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Image(
-                    provider = ImageProvider(R.drawable.widget_dot_together),
-                    contentDescription = null,
-                    modifier = GlanceModifier.size(8.dp),
-                )
-                Spacer(modifier = GlanceModifier.width(6.dp))
+        // Gleiche Bildsprache wie die Frei-Slot-Zeile darunter (32dp-Maskottchen statt
+        // reinem Farbpunkt) — vorher wirkte diese Zeile als einzige ohne Icon uneinheitlich.
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Image(
+                provider = ImageProvider(R.drawable.mascot_celebrating),
+                contentDescription = null,
+                modifier = GlanceModifier.size(32.dp),
+            )
+            Spacer(modifier = GlanceModifier.width(12.dp))
+            Column(modifier = GlanceModifier.defaultWeight()) {
                 Text(
                     text = "Nächste Wir-Zeit",
                     style = TextStyle(color = TextSoft, fontSize = 12.sp),
                     maxLines = 1,
                 )
+                Text(
+                    text = event.title,
+                    style = TextStyle(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold),
+                    maxLines = 1,
+                )
+                Text(
+                    text = formatEventTime(event, today),
+                    style = TextStyle(color = TextSoft, fontSize = 13.sp),
+                    maxLines = 1,
+                )
             }
-            Spacer(modifier = GlanceModifier.height(2.dp))
-            Text(
-                text = event.title,
-                style = TextStyle(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold),
-                maxLines = 1,
-            )
-            Text(
-                text = formatEventTime(event, today),
-                style = TextStyle(color = TextSoft, fontSize = 13.sp),
-                maxLines = 1,
-            )
         }
     }
 }
@@ -289,7 +293,10 @@ private fun NextFreeSlotRow(slot: FreeSlot?, today: LocalDate) {
     ) {
         Image(
             provider = ImageProvider(
-                if (slot == null) R.drawable.mascot_empty_state else R.drawable.mascot_celebrating,
+                // Eigene Pose statt der Wir-Zeit-Zeile weiter unten (die nutzt die
+                // glücklich-hüpfende `mascot_celebrating`) — hier nachdenklich-neugierig,
+                // als würde das Maskottchen schon überlegen, was man mit der Zeit anfängt.
+                if (slot == null) R.drawable.mascot_empty_state else R.drawable.mascot_pondering,
             ),
             contentDescription = null,
             modifier = GlanceModifier.size(32.dp),
