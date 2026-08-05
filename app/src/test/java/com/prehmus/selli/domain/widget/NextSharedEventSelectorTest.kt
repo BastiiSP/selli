@@ -88,6 +88,43 @@ class NextSharedEventSelectorTest {
     }
 
     @Test
+    fun `ignores non blocking all day together event`() {
+        val allDayMarker = event(
+            id = "all-day",
+            start = now.toLocalDate().atStartOfDay(),
+            end = now.toLocalDate().plusDays(1).atStartOfDay(),
+            isAllDay = true,
+            blocksSharedFreeTime = false,
+        )
+        val later = event(
+            id = "later",
+            start = now.plusHours(2),
+            end = now.plusHours(3),
+        )
+
+        assertEquals(later, selector.select(listOf(later, allDayMarker), now))
+        assertNull(selector.select(listOf(allDayMarker), now))
+    }
+
+    @Test
+    fun `counts blocking all day together event`() {
+        val allDayTrip = event(
+            id = "all-day",
+            start = now.toLocalDate().atStartOfDay(),
+            end = now.toLocalDate().plusDays(1).atStartOfDay(),
+            isAllDay = true,
+            blocksSharedFreeTime = true,
+        )
+        val later = event(
+            id = "later",
+            start = now.plusHours(2),
+            end = now.plusHours(3),
+        )
+
+        assertEquals(allDayTrip, selector.select(listOf(later, allDayTrip), now))
+    }
+
+    @Test
     fun `returns null when no qualifying event exists`() {
         val private = event(id = "private", category = EventCategory.PRIVATE)
         val endedTogether = event(
@@ -116,16 +153,19 @@ class NextSharedEventSelectorTest {
         end: LocalDateTime = now.plusHours(2),
         owner: Person = Person.MELLI,
         category: EventCategory = EventCategory.TOGETHER,
+        isAllDay: Boolean = false,
+        blocksSharedFreeTime: Boolean = !isAllDay,
     ): CalendarEvent =
         CalendarEvent(
             id = id,
             title = title,
             start = start,
             end = end,
-            isAllDay = false,
+            isAllDay = isAllDay,
             source = CalendarSource.GOOGLE_PARTNER,
             owner = owner,
             isSharedEvent = category == EventCategory.TOGETHER,
             category = category,
+            blocksSharedFreeTime = blocksSharedFreeTime,
         )
 }

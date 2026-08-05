@@ -57,12 +57,13 @@ class NextPartnerEventSelectorTest {
     }
 
     @Test
-    fun `counts all day event today`() {
-        val allDayToday = event(
+    fun `ignores non blocking all day event today`() {
+        val birthdayToday = event(
             id = "all-day",
             start = now.toLocalDate().atStartOfDay(),
             end = now.toLocalDate().plusDays(1).atStartOfDay(),
             isAllDay = true,
+            blocksSharedFreeTime = false,
         )
         val later = event(
             id = "later",
@@ -70,7 +71,26 @@ class NextPartnerEventSelectorTest {
             end = now.plusHours(3),
         )
 
-        assertEquals(allDayToday, selector.select(listOf(later, allDayToday), Person.MELLI, now))
+        assertEquals(later, selector.select(listOf(later, birthdayToday), Person.MELLI, now))
+        assertNull(selector.select(listOf(birthdayToday), Person.MELLI, now))
+    }
+
+    @Test
+    fun `counts blocking all day event today`() {
+        val vacationToday = event(
+            id = "all-day",
+            start = now.toLocalDate().atStartOfDay(),
+            end = now.toLocalDate().plusDays(1).atStartOfDay(),
+            isAllDay = true,
+            blocksSharedFreeTime = true,
+        )
+        val later = event(
+            id = "later",
+            start = now.plusHours(2),
+            end = now.plusHours(3),
+        )
+
+        assertEquals(vacationToday, selector.select(listOf(later, vacationToday), Person.MELLI, now))
     }
 
     @Test
@@ -88,6 +108,7 @@ class NextPartnerEventSelectorTest {
         end: LocalDateTime = now.plusHours(2),
         isAllDay: Boolean = false,
         owner: Person = Person.MELLI,
+        blocksSharedFreeTime: Boolean = !isAllDay,
     ): CalendarEvent =
         CalendarEvent(
             id = id,
@@ -98,5 +119,6 @@ class NextPartnerEventSelectorTest {
             source = CalendarSource.GOOGLE_PARTNER,
             owner = owner,
             isSharedEvent = false,
+            blocksSharedFreeTime = blocksSharedFreeTime,
         )
 }

@@ -3,6 +3,7 @@ package com.prehmus.selli.domain.merge
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.FreeTimeBlock
+import com.prehmus.selli.domain.model.countsAsBusy
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -37,7 +38,7 @@ object SharedFreeTimeCalculator {
         )
         val blockedIntervals = events
             .asSequence()
-            .filter { event -> !event.isAllDay || event.blocksSharedFreeTime }
+            .filter { event -> event.countsAsBusy }
             .mapNotNull { event -> event.blockedIntervalIn(window) }
             .sortedBy { interval -> interval.start }
             .toList()

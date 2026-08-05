@@ -51,6 +51,16 @@ data class CalendarEvent(
     val blocksSharedFreeTime: Boolean = !isAllDay,
 )
 
+/**
+ * Zählt der Termin als "beschäftigt"? Ganztägige Einträge nur mit expliziter Selli-Festlegung,
+ * weil sie in den verbundenen Kalendern häufig reine Marker wie Geburtstage sind.
+ *
+ * Quelle der Wahrheit für alle Stellen, die echte Termine von informativen Ganztags-Markern
+ * trennen — die Frei-Zeit-Berechnung ebenso wie die Widget-Selectors.
+ */
+val CalendarEvent.countsAsBusy: Boolean
+    get() = !isAllDay || blocksSharedFreeTime
+
 data class NewCalendarEvent(
     val title: String,
     val start: LocalDateTime,
