@@ -24,3 +24,6 @@ secrets.properties
 /tools/generate-assets/.env
 # Editor-Sicherungsdateien (z. B. von nano) könnten Reste vertraulicher Werte enthalten.
 *.save
+
+# Lokale Brainstorming-Mockups (superpowers:brainstorming Visual Companion) — kein Produktionscode.
+.superpowers/
