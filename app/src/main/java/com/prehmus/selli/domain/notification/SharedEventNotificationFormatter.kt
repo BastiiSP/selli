@@ -30,6 +30,11 @@ class SharedEventNotificationFormatter {
                 title = "$partnerDisplayName hat euren gemeinsamen Termin aktualisiert"
                 text = "${change.event.title} – ${change.changedFields.joinToString(", ")}"
             }
+
+            is SharedEventChange.DeleteRequested -> {
+                title = "$partnerDisplayName möchte einen Termin löschen"
+                text = "${change.event.title} – öffnen und löschen, um die Anfrage abzuschließen"
+            }
         }
 
         return SharedEventNotificationContent(

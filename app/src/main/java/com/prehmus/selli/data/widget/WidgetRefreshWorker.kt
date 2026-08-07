@@ -3,13 +3,16 @@ package com.prehmus.selli.data.widget
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
+import com.prehmus.selli.data.notification.DeleteRequestNotificationStore
 import com.prehmus.selli.data.notification.SharedEventFingerprintStore
 import com.prehmus.selli.data.notification.SharedEventNotifier
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.WidgetSnapshot
+import com.prehmus.selli.domain.model.other
 import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
+import com.prehmus.selli.domain.notification.SharedEventDeletionRequestDetector
 import com.prehmus.selli.domain.widget.NextPartnerEventSelector
 import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
@@ -74,15 +77,23 @@ class WidgetRefreshWorker(
         val notifier = SharedEventNotifier(applicationContext)
         if (!notifier.areNotificationsEnabled()) return
 
-        val store = SharedEventFingerprintStore(applicationContext)
-        val result = PartnerSharedEventChangeDetector().detect(
+        val fingerprintStore = SharedEventFingerprintStore(applicationContext)
+        val fingerprintResult = PartnerSharedEventChangeDetector().detect(
             currentEvents = events,
             partner = partner.person,
-            previouslySeen = store.load(),
+            previouslySeen = fingerprintStore.load(),
         )
 
-        notifier.notifyChanges(result.changes, partner.displayName)
-        store.save(result.updatedFingerprints)
+        val deleteRequestStore = DeleteRequestNotificationStore(applicationContext)
+        val deleteRequestResult = SharedEventDeletionRequestDetector().detect(
+            currentEvents = events,
+            self = partner.person.other(),
+            alreadyNotified = deleteRequestStore.load(),
+        )
+
+        notifier.notifyChanges(fingerprintResult.changes + deleteRequestResult.changes, partner.displayName)
+        fingerprintStore.save(fingerprintResult.updatedFingerprints)
+        deleteRequestStore.save(deleteRequestResult.updatedNotified)
     }
 
     private fun loadPartnerInfo(): PartnerInfo? {

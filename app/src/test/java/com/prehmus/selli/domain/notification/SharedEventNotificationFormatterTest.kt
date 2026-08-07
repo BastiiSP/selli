@@ -47,6 +47,23 @@ class SharedEventNotificationFormatterTest {
     }
 
     @Test
+    fun `formats a delete request notification`() {
+        val content = formatter.format(
+            SharedEventChange.DeleteRequested(
+                event = event(),
+                requestedBy = Person.MELLI,
+            ),
+            partnerDisplayName = "Melli",
+        )
+
+        assertEquals("Melli möchte einen Termin löschen", content.title)
+        assertEquals(
+            "Wochenende bei euch – öffnen und löschen, um die Anfrage abzuschließen",
+            content.text,
+        )
+    }
+
+    @Test
     fun `uses the same notification id for the same event key`() {
         val first = formatter.format(SharedEventChange.New(event(title = "Erster Titel")), "Melli")
         val second = formatter.format(

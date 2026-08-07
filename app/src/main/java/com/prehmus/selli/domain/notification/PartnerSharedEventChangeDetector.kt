@@ -18,6 +18,12 @@ sealed interface SharedEventChange {
         /** Menschenlesbare deutsche Beschreibungen der geänderten Werte, in fester Reihenfolge. */
         val changedFields: List<String>,
     ) : SharedEventChange
+
+    /** Der Partner hat um Löschung dieses eigenen Wir-Zeit-Termins gebeten. */
+    data class DeleteRequested(
+        override val event: CalendarEvent,
+        val requestedBy: Person,
+    ) : SharedEventChange
 }
 
 data class SharedEventDetectionResult(
