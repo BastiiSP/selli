@@ -35,6 +35,9 @@ class GoogleCalendarEventMapper(
             description = event.description,
             seriesId = event.recurringEventId,
             created = event.created?.toInstant()?.atZone(zoneId)?.toLocalDateTime(),
+            deleteRequestedBy = event.extendedProperties?.shared
+                ?.get(SELLI_DELETE_REQUESTED_PROPERTY)
+                ?.let { runCatching { Person.valueOf(it) }.getOrNull() },
         )
     }
 
@@ -75,5 +78,6 @@ class GoogleCalendarEventMapper(
 
     companion object {
         const val SELLI_SHARED_PROPERTY = "selli:shared"
+        const val SELLI_DELETE_REQUESTED_PROPERTY = "selli:deleteRequestedBy"
     }
 }

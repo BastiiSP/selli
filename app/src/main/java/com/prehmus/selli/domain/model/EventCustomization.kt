@@ -52,4 +52,12 @@ data class EventCustomization(
     val hidden: Boolean,
     val overrides: EventFieldOverrides = EventFieldOverrides(),
     val label: String = "",
+    /**
+     * Kategorie des Termins zum Zeitpunkt der Anpassung (nicht die Override-Kategorie
+     * aus [overrides] — die tatsächliche, ursprüngliche Kategorie). Ausgeblendete Termine
+     * fehlen im gefilterten, zusammengeführten Kalender komplett — der Verwaltungsscreen
+     * braucht diesen Wert, um zu wissen, ob "Löschen"/"Löschen anfragen" sinnvoll ist.
+     * `null` bei älteren, vor diesem Feld gespeicherten Einträgen.
+     */
+    val originalCategory: EventCategory? = null,
 )

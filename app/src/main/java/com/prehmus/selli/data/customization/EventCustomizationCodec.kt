@@ -54,6 +54,7 @@ class EventCustomizationCodec(
             category = overrides.category?.name,
             blocksSharedFreeTime = overrides.blocksSharedFreeTime,
             label = label,
+            originalCategory = originalCategory?.name,
         )
     }
 
@@ -90,6 +91,7 @@ class EventCustomizationCodec(
                 blocksSharedFreeTime = blocksSharedFreeTime,
             ),
             label = label,
+            originalCategory = originalCategory?.let { EventCategory.valueOf(it) },
         )
     }
 
@@ -115,6 +117,7 @@ class EventCustomizationCodec(
         val category: String?,
         val blocksSharedFreeTime: Boolean?,
         val label: String,
+        val originalCategory: String? = null,
     )
 
     private companion object {

@@ -103,4 +103,41 @@ class EventCustomizationCodecTest {
 
         assertNull(customization.overrides.endDate)
     }
+
+    @Test
+    fun `decodes version one customization without original category as unspecified`() {
+        val legacyJson = """
+            {
+              "version": 1,
+              "customizations": [
+                {
+                  "targetType": "occurrence",
+                  "source": "GOOGLE_OWN",
+                  "eventId": "legacy-event",
+                  "hidden": false,
+                  "label": "Alter Termin"
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val customization = codec.decode(legacyJson).single()
+
+        assertNull(customization.originalCategory)
+    }
+
+    @Test
+    fun `round trip preserves original category`() {
+        val customization = EventCustomization(
+            target = CustomizationTarget.Occurrence(
+                EventKey(CalendarSource.GOOGLE_OWN, "event-1"),
+            ),
+            hidden = true,
+            originalCategory = EventCategory.TOGETHER,
+        )
+
+        val decoded = codec.decode(codec.encode(listOf(customization))).single()
+
+        assertEquals(EventCategory.TOGETHER, decoded.originalCategory)
+    }
 }

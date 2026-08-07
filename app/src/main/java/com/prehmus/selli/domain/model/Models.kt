@@ -5,6 +5,8 @@ import java.time.LocalDateTime
 
 enum class Person { BASTI, MELLI }
 
+fun Person.other(): Person = if (this == Person.BASTI) Person.MELLI else Person.BASTI
+
 enum class CalendarSource { GOOGLE_OWN, GOOGLE_PARTNER, WORK_ICS }
 
 data class Account(
@@ -55,6 +57,12 @@ data class CalendarEvent(
      * Dr.-Plano-Feed) gibt es kein verlässliches Äquivalent → bleibt `null`.
      */
     val created: LocalDateTime? = null,
+    /**
+     * Person, die über die Lösch-Anfrage-Markierung (`extendedProperties.shared`) um
+     * Löschung dieses Wir-Zeit-Termins gebeten hat — nur bei `category == TOGETHER`
+     * relevant. `null` = keine offene Anfrage.
+     */
+    val deleteRequestedBy: Person? = null,
 )
 
 /**

@@ -123,6 +123,38 @@ class GoogleCalendarEventMapperTest {
     }
 
     @Test
+    fun `maps delete request marker from Google event`() {
+        val event = timedEvent()
+            .setExtendedProperties(
+                ExtendedProperties()
+                    .setShared(mapOf("selli:deleteRequestedBy" to "BASTI")),
+            )
+
+        val result = mapper.toCalendarEvent(
+            event = event,
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.MELLI,
+            ownEmail = "melli@example.com",
+            partnerEmail = null,
+        )
+
+        assertEquals(Person.BASTI, result.deleteRequestedBy)
+    }
+
+    @Test
+    fun `delete request marker is null when absent`() {
+        val result = mapper.toCalendarEvent(
+            event = timedEvent(),
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.MELLI,
+            ownEmail = "melli@example.com",
+            partnerEmail = null,
+        )
+
+        assertNull(result.deleteRequestedBy)
+    }
+
+    @Test
     fun `detects shared event when both people are attendees`() {
         val googleEvent = timedEvent()
             .setAttendees(
