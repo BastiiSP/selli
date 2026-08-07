@@ -293,6 +293,7 @@ fun CalendarScreen(
             onSetCategory = viewModel::setSelectedEventCategory,
             onResetCustomization = viewModel::resetSelectedEventCustomization,
             onDelete = viewModel::deleteSelectedEvent,
+            onRequestDeletion = viewModel::requestDeletionOfSelectedEvent,
             onDismiss = viewModel::dismissEventActions,
         )
     }

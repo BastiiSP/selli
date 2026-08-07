@@ -63,6 +63,7 @@ fun EventActionsSheet(
     onSetCategory: (category: EventCategory, wholeSeries: Boolean) -> Unit,
     onResetCustomization: () -> Unit,
     onDelete: (scope: DeletionScope) -> Unit,
+    onRequestDeletion: (wholeSeries: Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -71,8 +72,11 @@ fun EventActionsSheet(
     var pendingCategory by remember { mutableStateOf<EventCategory?>(null) }
     // Echtes Löschen wird immer per Dialog bestätigt (destruktiv, verändert Google).
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showRequestDeleteConfirm by remember { mutableStateOf(false) }
     // Nur eigene Google-Termine lassen sich echt löschen; sonst bleibt nur lokales Ausblenden.
     val canDelete = event.source == CalendarSource.GOOGLE_OWN
+    val canRequestDeletion =
+        event.source == CalendarSource.GOOGLE_PARTNER && event.category == EventCategory.TOGETHER
     val enabledCategories = when {
         event.source == CalendarSource.GOOGLE_OWN -> EventCategory.entries.toSet()
         event.category == EventCategory.TOGETHER -> setOf(EventCategory.TOGETHER)
@@ -210,6 +214,18 @@ fun EventActionsSheet(
                     Icon(Icons.Default.Delete, contentDescription = null)
                     Text("Endgültig löschen", modifier = Modifier.padding(start = 8.dp))
                 }
+            } else if (canRequestDeletion) {
+                OutlinedButton(
+                    onClick = { showRequestDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Text("Löschen anfragen", modifier = Modifier.padding(start = 8.dp))
+                }
             }
         }
     }
@@ -261,6 +277,35 @@ fun EventActionsSheet(
                     }
                     TextButton(
                         onClick = { showDeleteConfirm = false },
+                        modifier = Modifier.padding(top = 8.dp),
+                    ) { Text("Abbrechen") }
+                }
+            },
+        )
+    }
+
+    if (showRequestDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showRequestDeleteConfirm = false },
+            title = { Text("Löschen anfragen?") },
+            text = {
+                Text(
+                    "„${event.title}“ gehört nicht dir — du kannst ihn nicht selbst endgültig " +
+                        "löschen. Er verschwindet sofort aus deiner Ansicht; die Person, die ihn " +
+                        "angelegt hat, bekommt eine Anfrage, ihn ebenfalls zu löschen.",
+                )
+            },
+            confirmButton = {
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(
+                        onClick = {
+                            showRequestDeleteConfirm = false
+                            onRequestDeletion(false)
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Anfrage senden") }
+                    TextButton(
+                        onClick = { showRequestDeleteConfirm = false },
                         modifier = Modifier.padding(top = 8.dp),
                     ) { Text("Abbrechen") }
                 }
