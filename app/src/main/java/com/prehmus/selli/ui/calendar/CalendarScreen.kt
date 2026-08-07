@@ -147,7 +147,7 @@ fun CalendarScreen(
             MascotHeader(
                 title = calendarHeaderTitle(uiState.viewMode, uiState.visibleMonth, uiState.selectedDay),
                 isSyncing = uiState.isSyncing,
-                freeBlocks = uiState.freeBlocksOnSelectedDay,
+                nextWirZeitEvent = uiState.nextWirZeitEvent,
                 collapsed = layout.headerCollapsed,
                 onToggleCollapsed = { layout.updateHeaderCollapsed(!layout.headerCollapsed) },
                 onPrevious = goPrevious,
@@ -155,7 +155,7 @@ fun CalendarScreen(
                 onRefresh = { viewModel.refresh(forceNetwork = true) },
                 onManageCustomizations = viewModel::openCustomizationManager,
                 onSwitchAccount = { showSwitchAccountDialog = true },
-                onFreeBlockClick = viewModel::openCreateSheetForFreeBlock,
+                onWirZeitCountdownClick = viewModel::onWirZeitCountdownClick,
             )
             ViewModeSwitcher(
                 selected = uiState.viewMode,
