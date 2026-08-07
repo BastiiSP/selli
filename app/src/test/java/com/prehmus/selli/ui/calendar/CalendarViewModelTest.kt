@@ -15,6 +15,7 @@ import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.RecurrenceFrequency
+import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import java.time.LocalDate
@@ -358,6 +359,66 @@ class CalendarViewModelTest {
             assertEquals(stateBeforeClick, fixture.viewModel.uiState.value)
         }
 
+    @Test
+    fun `successful partner deletion request hides whole series locally`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val event = partnerTogetherEvent(
+                id = "wz-series-occurrence",
+                day = LocalDate.of(2026, 8, 3),
+            ).copy(seriesId = "wz-series")
+            val fixture = fixture()
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.requestDeletionOfSelectedEvent(wholeSeries = true)
+
+            assertNull(fixture.viewModel.uiState.value.selectedEvent)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(PartnerDeletionCall(event, wholeSeries = true)),
+                fixture.calendarRepository.partnerDeletionCalls,
+            )
+            val saved = fixture.customizationRepository.customizations.single()
+            assertTrue(saved.hidden)
+            assertEquals(
+                CustomizationTarget.SeriesFrom(
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    seriesId = "wz-series",
+                    fromStart = event.start,
+                ),
+                saved.target,
+            )
+            assertEquals(EventCategory.TOGETHER, saved.originalCategory)
+        }
+
+    @Test
+    fun `failed partner deletion request still hides occurrence locally`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val event = partnerTogetherEvent(
+                id = "wz-occurrence",
+                day = LocalDate.of(2026, 8, 3),
+            )
+            val fixture = fixture(
+                partnerDeletionResult = Result.failure(
+                    IllegalStateException("Google nicht erreichbar"),
+                ),
+            )
+
+            fixture.viewModel.selectEvent(event)
+            fixture.viewModel.requestDeletionOfSelectedEvent(wholeSeries = false)
+
+            assertNull(fixture.viewModel.uiState.value.selectedEvent)
+            advanceUntilIdle()
+
+            assertEquals(
+                listOf(PartnerDeletionCall(event, wholeSeries = false)),
+                fixture.calendarRepository.partnerDeletionCalls,
+            )
+            val saved = fixture.customizationRepository.customizations.single()
+            assertTrue(saved.hidden)
+            assertEquals(CustomizationTarget.Occurrence(event.key()), saved.target)
+        }
+
     private fun partnerTogetherEvent(id: String, day: LocalDate): CalendarEvent =
         CalendarEvent(
             id = id,
@@ -374,9 +435,13 @@ class CalendarViewModelTest {
     private fun fixture(
         initialCustomizations: List<EventCustomization> = emptyList(),
         sharingResult: Result<Unit> = Result.success(Unit),
+        partnerDeletionResult: Result<Unit> = Result.success(Unit),
         mergedEvents: List<CalendarEvent> = emptyList(),
     ): Fixture {
-        val calendarRepository = RecordingCalendarRepository(sharingResult)
+        val calendarRepository = RecordingCalendarRepository(
+            sharingResult = sharingResult,
+            partnerDeletionResult = partnerDeletionResult,
+        )
         val customizationRepository = InMemoryCustomizationRepository(initialCustomizations)
         return Fixture(
             viewModel = CalendarViewModel(
@@ -459,12 +524,19 @@ class CalendarViewModelTest {
         val wholeSeries: Boolean,
     )
 
+    private data class PartnerDeletionCall(
+        val event: CalendarEvent,
+        val wholeSeries: Boolean,
+    )
+
     private class RecordingCalendarRepository(
         private val sharingResult: Result<Unit>,
+        private val partnerDeletionResult: Result<Unit>,
     ) : CalendarRepository {
         val createCalls = mutableListOf<NewCalendarEvent>()
         val deleteCalls = mutableListOf<Pair<CalendarEvent, DeletionScope>>()
         val sharingCalls = mutableListOf<SharingCall>()
+        val partnerDeletionCalls = mutableListOf<PartnerDeletionCall>()
 
         override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> {
             createCalls += event
@@ -497,6 +569,14 @@ class CalendarViewModelTest {
         ): Result<Unit> {
             sharingCalls += SharingCall(event, shared, wholeSeries)
             return sharingResult
+        }
+
+        override suspend fun requestPartnerDeletion(
+            event: CalendarEvent,
+            wholeSeries: Boolean,
+        ): Result<Unit> {
+            partnerDeletionCalls += PartnerDeletionCall(event, wholeSeries)
+            return partnerDeletionResult
         }
     }
 

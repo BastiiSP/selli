@@ -352,9 +352,39 @@ class CalendarViewModel(
                 target = event.customizationTarget(wholeSeries),
                 hidden = true,
                 label = event.title,
+                originalCategory = event.category,
             ),
             successMessage = "Nur in Selli ausgeblendet — dein Google-Kalender bleibt unverändert.",
         )
+    }
+
+    /**
+     * Löst für einen Wir-Zeit-Termin der Partnerin eine Lösch-Anfrage aus: der Termin wird
+     * bei einem selbst sofort lokal ausgeblendet (wie [hideSelectedEvent]), zusätzlich wird
+     * versucht, eine Markierung auf dem Termin zu hinterlegen, die die Partnerin beim
+     * nächsten Sync benachrichtigt. Schlägt Letzteres fehl (z. B. fehlende Schreibrechte),
+     * bleibt das lokale Ausblenden trotzdem bestehen — kein Absturz, nur ein Hinweis.
+     */
+    fun requestDeletionOfSelectedEvent(wholeSeries: Boolean) {
+        val event = _uiState.value.selectedEvent ?: return
+        _uiState.update { it.copy(selectedEvent = null) }
+        viewModelScope.launch {
+            val requestResult = calendarRepository.requestPartnerDeletion(event, wholeSeries)
+            val successMessage = if (requestResult.isSuccess) {
+                "Bei dir ausgeblendet — Anfrage an deine Partnerin/deinen Partner geschickt."
+            } else {
+                "Bei dir ausgeblendet — die Anfrage konnte nicht übermittelt werden, bitte direkt Bescheid geben."
+            }
+            applyCustomization(
+                EventCustomization(
+                    target = event.customizationTarget(wholeSeries),
+                    hidden = true,
+                    label = event.title,
+                    originalCategory = event.category,
+                ),
+                successMessage = successMessage,
+            )
+        }
     }
 
     /**
@@ -428,6 +458,7 @@ class CalendarViewModel(
             hidden = existing?.hidden ?: false,
             overrides = (existing?.overrides ?: EventFieldOverrides()).copy(category = category),
             label = existing?.label?.ifBlank { event.title } ?: event.title,
+            originalCategory = existing?.originalCategory ?: event.category,
         )
 
         runCatching { customizationRepository.save(customization) }
@@ -509,6 +540,7 @@ class CalendarViewModel(
                     hidden = existing?.hidden ?: false,
                     overrides = mergedOverrides,
                     label = existing?.label?.ifBlank { event.title } ?: event.title,
+                    originalCategory = existing?.originalCategory ?: event.category,
                 ),
                 successMessage = "Nur in Selli angepasst — dein Google-Kalender bleibt unverändert.",
             )
@@ -619,6 +651,7 @@ class CalendarViewModel(
                     hidden = false,
                     overrides = overrides,
                     label = created.title,
+                    originalCategory = category ?: derived,
                 ),
             )
         }.isSuccess
