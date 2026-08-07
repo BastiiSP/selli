@@ -158,7 +158,9 @@ class GoogleCalendarDataRepository(
                             calendarId = PRIMARY_CALENDAR_ID,
                             timeMin = timeMin,
                             timeMax = timeMax,
-                        ).map { event ->
+                        ).filterNot { event ->
+                            event.isOrganizedByPartner(partnerAccount.email)
+                        }.map { event ->
                             mapper.toCalendarEvent(
                                 event = event,
                                 source = CalendarSource.GOOGLE_OWN,
@@ -406,6 +408,22 @@ internal fun sessionState(ownAccount: Account?, partnerAccount: Account?): Sessi
         partnerAccount == null -> SessionState.NeedsPartner(ownAccount)
         else -> SessionState.Linked(ownAccount, partnerAccount)
     }
+
+/**
+ * True when Google lists the partner as organizer of this event.
+ *
+ * Google copies invitations into the invitee's own calendar, so an event the partner created and
+ * invited us to shows up in both the "primary" fetch and the partner-calendar fetch. Only the
+ * partner-calendar copy carries the right [CalendarSource], so the own-calendar copy is dropped.
+ * Events organized by a third person (e.g. a work invitation) are not duplicated and stay visible.
+ */
+internal fun Event.isOrganizedByPartner(partnerEmail: String): Boolean {
+    val organizer = organizer ?: return false
+    if (organizer.self == true) return false
+    val organizerEmail = organizer.email?.trim()?.lowercase() ?: return false
+
+    return organizerEmail == partnerEmail.trim().lowercase()
+}
 
 internal fun sessionKeysToReset(keys: Set<String>): Set<String> =
     keys.filterTo(mutableSetOf()) { key ->
