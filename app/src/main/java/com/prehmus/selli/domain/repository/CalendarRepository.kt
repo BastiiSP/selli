@@ -16,6 +16,11 @@ interface CalendarRepository {
             UnsupportedOperationException("Wir-Zeit-Synchronisation wird für diese Quelle nicht unterstützt."),
         )
 
+    suspend fun requestPartnerDeletion(event: CalendarEvent, wholeSeries: Boolean): Result<Unit> =
+        Result.failure(
+            UnsupportedOperationException("Lösch-Anfrage wird für diese Quelle nicht unterstützt."),
+        )
+
     suspend fun deleteEvent(event: CalendarEvent, scope: DeletionScope): Result<Unit> =
         Result.failure(UnsupportedOperationException("Löschen wird für diese Quelle nicht unterstützt."))
 }

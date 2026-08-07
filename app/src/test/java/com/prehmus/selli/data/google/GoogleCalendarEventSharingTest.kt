@@ -5,6 +5,7 @@ import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.calendar.Calendar
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.Person
 import java.time.LocalDateTime
 import java.util.zip.GZIPInputStream
@@ -122,6 +123,113 @@ class GoogleCalendarEventSharingTest {
             assertEquals(0, server.requestCount)
         }
 
+    @Test
+    fun `deletion request for own event fails without api call`() =
+        withServer { server, sharing ->
+            val result = sharing.requestDeletion(
+                event = ownEvent(category = EventCategory.TOGETHER),
+                requestedBy = Person.BASTI,
+                wholeSeries = false,
+            )
+
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+            assertEquals(0, server.requestCount)
+        }
+
+    @Test
+    fun `deletion request for non-together event fails without api call`() =
+        withServer { server, sharing ->
+            val result = sharing.requestDeletion(
+                event = ownEvent(
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    category = EventCategory.PRIVATE,
+                ),
+                requestedBy = Person.BASTI,
+                wholeSeries = false,
+            )
+
+            assertTrue(result.isFailure)
+            assertTrue(result.exceptionOrNull() is IllegalArgumentException)
+            assertEquals(0, server.requestCount)
+        }
+
+    @Test
+    fun `deletion request marks partner occurrence and preserves other shared properties`() =
+        withServer { server, sharing ->
+            server.enqueue(
+                jsonResponse(
+                    """{"id":"event-1","extendedProperties":{"shared":{"other":"keep"}}}""",
+                ),
+            )
+            server.enqueue(jsonResponse("{}"))
+
+            val result = sharing.requestDeletion(
+                event = ownEvent(
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    category = EventCategory.TOGETHER,
+                ),
+                requestedBy = Person.BASTI,
+                wholeSeries = false,
+            )
+
+            assertTrue(result.isSuccess)
+            assertEquals("/calendar/v3/calendars/primary/events/event-1", server.takeRequest().path)
+            val update = server.takeRequest()
+            assertEquals("PUT", update.method)
+            assertEquals("none", update.requestUrl?.queryParameter("sendUpdates"))
+            val body = update.decodedBody()
+            assertTrue(body.contains("\"selli:deleteRequestedBy\":\"BASTI\""))
+            assertTrue(body.contains("\"other\":\"keep\""))
+        }
+
+    @Test
+    fun `whole series deletion request updates recurring master`() =
+        withServer { server, sharing ->
+            server.enqueue(jsonResponse("""{"id":"series-1"}"""))
+            server.enqueue(jsonResponse("{}"))
+
+            val result = sharing.requestDeletion(
+                event = ownEvent(
+                    id = "instance-1",
+                    seriesId = "series-1",
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    category = EventCategory.TOGETHER,
+                ),
+                requestedBy = Person.BASTI,
+                wholeSeries = true,
+            )
+
+            assertTrue(result.isSuccess)
+            assertEquals("/calendar/v3/calendars/primary/events/series-1", server.takeRequest().path)
+            assertEquals(
+                "/calendar/v3/calendars/primary/events/series-1",
+                server.takeRequest().requestUrl?.encodedPath,
+            )
+        }
+
+    @Test
+    fun `forbidden deletion request returns failure`() =
+        withServer { server, sharing ->
+            server.enqueue(
+                jsonResponse(
+                    """{"error":{"code":403,"message":"Forbidden"}}""",
+                ).setResponseCode(403),
+            )
+
+            val result = sharing.requestDeletion(
+                event = ownEvent(
+                    source = CalendarSource.GOOGLE_PARTNER,
+                    category = EventCategory.TOGETHER,
+                ),
+                requestedBy = Person.BASTI,
+                wholeSeries = false,
+            )
+
+            assertTrue(result.isFailure)
+            assertEquals(1, server.requestCount)
+        }
+
     private fun withServer(
         block: suspend (MockWebServer, GoogleCalendarEventSharing) -> Unit,
     ) = runTest {
@@ -140,6 +248,7 @@ class GoogleCalendarEventSharingTest {
         seriesId: String? = null,
         isShared: Boolean = false,
         source: CalendarSource = CalendarSource.GOOGLE_OWN,
+        category: EventCategory = EventCategory.PRIVATE,
     ) = CalendarEvent(
         id = id,
         title = "Termin",
@@ -150,6 +259,7 @@ class GoogleCalendarEventSharingTest {
         owner = Person.BASTI,
         isSharedEvent = isShared,
         seriesId = seriesId,
+        category = category,
     )
 
     private fun jsonResponse(body: String): MockResponse =

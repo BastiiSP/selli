@@ -239,6 +239,23 @@ class GoogleCalendarDataRepository(
             }
         }
 
+    override suspend fun requestPartnerDeletion(
+        event: CalendarEvent,
+        wholeSeries: Boolean,
+    ): Result<Unit> =
+        withGoogleCalendarDispatcher(ioDispatcher) {
+            runGoogleApiCatching {
+                val ownAccount = requireStoredAccount(OWN_PREFIX)
+                GoogleCalendarEventSharing(calendar(ownAccount.email))
+                    .requestDeletion(
+                        event = event,
+                        requestedBy = ownAccount.person,
+                        wholeSeries = wholeSeries,
+                    )
+                    .getOrThrow()
+            }
+        }
+
     override suspend fun sessionState(): SessionState =
         sessionState(
             ownAccount = storedAccount(OWN_PREFIX),
