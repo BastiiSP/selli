@@ -312,6 +312,7 @@ fun CalendarScreen(
         CustomizationManagerSheet(
             customizations = uiState.storedCustomizations,
             onRemove = viewModel::removeCustomization,
+            onDelete = viewModel::deleteFromCustomizationManager,
             onDismiss = viewModel::dismissCustomizationManager,
         )
     }

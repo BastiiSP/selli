@@ -9,17 +9,29 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.ui.components.MascotMood
 import com.prehmus.selli.ui.components.SelliMascot
@@ -39,6 +51,7 @@ private val FromDateFormat = DateTimeFormatter.ofPattern("d. MMMM yyyy", Locale.
 fun CustomizationManagerSheet(
     customizations: List<EventCustomization>,
     onRemove: (CustomizationTarget) -> Unit,
+    onDelete: (CustomizationTarget) -> Unit,
     onDismiss: () -> Unit,
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
@@ -78,7 +91,11 @@ fun CustomizationManagerSheet(
             } else {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(customizations, key = { it.target.toString() }) { customization ->
-                        CustomizationRow(customization = customization, onRemove = onRemove)
+                        CustomizationRow(
+                            customization = customization,
+                            onRemove = onRemove,
+                            onDelete = onDelete,
+                        )
                     }
                 }
             }
@@ -90,8 +107,18 @@ fun CustomizationManagerSheet(
 private fun CustomizationRow(
     customization: EventCustomization,
     onRemove: (CustomizationTarget) -> Unit,
+    onDelete: (CustomizationTarget) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+    val occurrence = customization.target as? CustomizationTarget.Occurrence
+    val source = occurrence?.key?.source
+    val canDelete = source == CalendarSource.GOOGLE_OWN
+    val canRequestDeletion =
+        source == CalendarSource.GOOGLE_PARTNER &&
+            customization.originalCategory == EventCategory.TOGETHER
+    val label = customization.label.ifBlank { "Unbenannter Termin" }
+
     Surface(
         modifier = modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.medium,
@@ -104,7 +131,7 @@ private fun CustomizationRow(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = customization.label.ifBlank { "Unbenannter Termin" },
+                    text = label,
                     style = MaterialTheme.typography.titleSmall,
                 )
                 Text(
@@ -120,9 +147,57 @@ private fun CustomizationRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            if (canDelete || canRequestDeletion) {
+                IconButton(onClick = { showDeleteConfirm = true }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = if (canDelete) "Endgültig löschen" else "Löschen anfragen",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
             TextButton(onClick = { onRemove(customization.target) }) {
                 Text(if (customization.hidden) "Einblenden" else "Zurücksetzen")
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text(if (canDelete) "Termin löschen?" else "Löschen anfragen?") },
+            text = {
+                Text(
+                    if (canDelete) {
+                        "„$label“ wird endgültig aus deinem Google-Kalender entfernt. " +
+                            "Das lässt sich nicht rückgängig machen."
+                    } else {
+                        "Die Person, die „$label“ angelegt hat, bekommt eine Anfrage, ihn zu löschen."
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDelete(customization.target)
+                    },
+                    colors = if (canDelete) {
+                        ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.error,
+                        )
+                    } else {
+                        ButtonDefaults.textButtonColors()
+                    },
+                ) {
+                    Text(if (canDelete) "Löschen" else "Anfrage senden")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Abbrechen")
+                }
+            },
+        )
     }
 }

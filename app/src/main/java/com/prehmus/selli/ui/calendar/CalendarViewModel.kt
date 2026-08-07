@@ -17,6 +17,7 @@ import com.prehmus.selli.domain.model.EventFieldOverrides
 import com.prehmus.selli.domain.model.EventKey
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
+import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.domain.repository.CalendarRepository
@@ -601,6 +602,72 @@ class CalendarViewModel(
             _uiState.update { it.copy(storedCustomizations = stored) }
             refresh()
         }
+    }
+
+    /**
+     * Löscht aus der Verwaltung heraus ein einzelnes Google-Vorkommen beziehungsweise sendet
+     * dafür eine Lösch-Anfrage. Die Aktion ist bewusst auf [CustomizationTarget.Occurrence]
+     * beschränkt: [CustomizationTarget.SeriesFrom] kennt nur die ID des Serien-Masters und
+     * könnte dadurch versehentlich die gesamte Serie einschließlich vergangener Termine löschen
+     * oder die Lösch-Anfrage auf dem Master statt auf dem gewählten Vorkommen hinterlegen.
+     */
+    fun deleteFromCustomizationManager(target: CustomizationTarget) {
+        val occurrence = target as? CustomizationTarget.Occurrence ?: return
+        viewModelScope.launch {
+            val customization = _uiState.value.storedCustomizations
+                .firstOrNull { it.target == target }
+            val minimalEvent = occurrence.toMinimalCalendarEvent(customization)
+            val result = if (occurrence.key.source == CalendarSource.GOOGLE_OWN) {
+                calendarRepository.deleteEvent(minimalEvent, DeletionScope.SINGLE_OCCURRENCE)
+            } else {
+                calendarRepository.requestPartnerDeletion(minimalEvent, wholeSeries = false)
+            }
+
+            result.onSuccess {
+                customizationRepository.remove(target)
+                _uiState.update {
+                    it.copy(
+                        storedCustomizations = it.storedCustomizations.filterNot { stored ->
+                            stored.target == target
+                        },
+                        userMessage = if (occurrence.key.source == CalendarSource.GOOGLE_OWN) {
+                            "Termin gelöscht."
+                        } else {
+                            "Anfrage geschickt."
+                        },
+                    )
+                }
+                refresh(forceNetwork = true)
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(userMessage = error.message ?: "Aktion fehlgeschlagen.")
+                }
+            }
+        }
+    }
+
+    /**
+     * Nur ID, Quelle und Kategorie werden von den beiden Einzelvorkommen-Pfaden ausgewertet.
+     * Die übrigen Pflichtfelder sind neutrale Platzhalter; [CalendarEvent.seriesId] bleibt
+     * ausdrücklich `null`, damit aus dieser Rekonstruktion niemals eine Serienaktion entsteht.
+     */
+    private fun CustomizationTarget.Occurrence.toMinimalCalendarEvent(
+        customization: EventCustomization?,
+    ): CalendarEvent {
+        val now = LocalDateTime.now()
+        val category = customization?.originalCategory ?: EventCategory.TOGETHER
+        return CalendarEvent(
+            id = key.eventId,
+            title = customization?.label.orEmpty(),
+            start = now,
+            end = now,
+            isAllDay = false,
+            source = key.source,
+            owner = if (key.source == CalendarSource.GOOGLE_OWN) Person.BASTI else Person.MELLI,
+            isSharedEvent = category == EventCategory.TOGETHER,
+            seriesId = null,
+            category = category,
+        )
     }
 
     private fun applyCustomization(customization: EventCustomization, successMessage: String) {
