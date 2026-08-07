@@ -9,6 +9,7 @@ import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
+import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.EventCategory
 import com.prehmus.selli.domain.model.EventCustomization
@@ -20,7 +21,9 @@ import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
+import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.YearMonth
 import kotlinx.coroutines.CancellationException
@@ -58,6 +61,11 @@ data class CalendarUiState(
     /** Verwaltung der lokal gespeicherten Ausblendungen/Anpassungen. */
     val isCustomizationManagerOpen: Boolean = false,
     val storedCustomizations: List<EventCustomization> = emptyList(),
+    /**
+     * Nächster Wir-Zeit-Termin ab *heute*, unabhängig vom gerade im Kalender betrachteten Tag
+     * (eigener 30-Tage-Fetch, analog zum Widget). Treibt den Countdown im Kalender-Header.
+     */
+    val nextWirZeitEvent: CalendarEvent? = null,
 ) {
     val selectedDayEvents: List<CalendarEvent>
         get() = eventsByDay[selectedDay].orEmpty()
@@ -102,6 +110,7 @@ class CalendarViewModel(
         )
         uiState = _uiState.asStateFlow()
         refresh()
+        refreshNextWirZeitEvent()
     }
 
     /**
@@ -137,6 +146,7 @@ class CalendarViewModel(
                         loadErrors = merged.errors,
                     )
                 }
+                refreshNextWirZeitEvent()
                 refreshFreeBlocks(_uiState.value.selectedDay)
                 // Wartet ein Benachrichtigungs-Termin auf seinen Tag, ist er jetzt da. Danach in
                 // jedem Fall verwerfen: ein inzwischen gelöschter Termin darf nicht irgendwann
@@ -206,6 +216,20 @@ class CalendarViewModel(
     fun selectDay(day: LocalDate) {
         _uiState.update { it.copy(selectedDay = day, freeBlocksOnSelectedDay = emptyList()) }
         refreshFreeBlocks(day)
+    }
+
+    /**
+     * Lädt den nächsten Wir-Zeit-Termin unabhängig vom aktuell angezeigten Kalenderausschnitt —
+     * dieselbe 30-Tage-Fensterlogik wie `WidgetRefreshWorker`, damit der Header-Countdown auch
+     * dann korrekt ist, wenn man gerade einen anderen Monat/Tag anschaut oder gar nicht blättert.
+     */
+    private fun refreshNextWirZeitEvent() {
+        viewModelScope.launch {
+            val range = DateRange(start = LocalDate.now(), endInclusive = LocalDate.now().plusDays(30))
+            val events = runCatching { mergeService.mergedEvents(range) }.getOrDefault(emptyList())
+            val nextEvent = NextSharedEventSelector().select(events = events, now = LocalDateTime.now())
+            _uiState.update { it.copy(nextWirZeitEvent = nextEvent) }
+        }
     }
 
     private fun refreshFreeBlocks(day: LocalDate) {
@@ -296,6 +320,12 @@ class CalendarViewModel(
         refreshFreeBlocks(day)
         // Sind die Termine schon geladen, greift das sofort; sonst übernimmt refresh().
         if (!resolvePendingDeepLink()) refresh()
+    }
+
+    /** Tippen auf den Wir-Zeit-Countdown im Header: springt zum Tag/Termin der nächsten Wir-Zeit. */
+    fun onWirZeitCountdownClick() {
+        val event = _uiState.value.nextWirZeitEvent ?: return
+        openDeepLinkedEvent(day = event.start.toLocalDate(), key = event.key())
     }
 
     /** @return true, wenn der gemerkte Termin gefunden und geöffnet wurde. */

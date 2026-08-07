@@ -315,6 +315,49 @@ class CalendarViewModelTest {
             assertNull(fixture.viewModel.uiState.value.selectedEvent)
         }
 
+    @Test
+    fun `refresh fills next Wir-Zeit event from merge service`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val nextWirZeit = partnerTogetherEvent(
+                id = "next-wir-zeit",
+                day = LocalDate.now().plusDays(2),
+            )
+            val fixture = fixture(mergedEvents = listOf(nextWirZeit))
+
+            fixture.viewModel.refresh()
+            advanceUntilIdle()
+
+            assertEquals(nextWirZeit, fixture.viewModel.uiState.value.nextWirZeitEvent)
+        }
+
+    @Test
+    fun `Wir-Zeit countdown click jumps to event day and opens event`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val eventDay = LocalDate.now().plusDays(2)
+            val nextWirZeit = partnerTogetherEvent(id = "next-wir-zeit", day = eventDay)
+            val fixture = fixture(mergedEvents = listOf(nextWirZeit))
+            advanceUntilIdle()
+
+            fixture.viewModel.onWirZeitCountdownClick()
+            advanceUntilIdle()
+
+            assertEquals(eventDay, fixture.viewModel.uiState.value.selectedDay)
+            assertEquals(nextWirZeit, fixture.viewModel.uiState.value.selectedEvent)
+        }
+
+    @Test
+    fun `Wir-Zeit countdown click without event leaves state unchanged`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            val fixture = fixture()
+            advanceUntilIdle()
+            val stateBeforeClick = fixture.viewModel.uiState.value
+
+            fixture.viewModel.onWirZeitCountdownClick()
+            advanceUntilIdle()
+
+            assertEquals(stateBeforeClick, fixture.viewModel.uiState.value)
+        }
+
     private fun partnerTogetherEvent(id: String, day: LocalDate): CalendarEvent =
         CalendarEvent(
             id = id,
