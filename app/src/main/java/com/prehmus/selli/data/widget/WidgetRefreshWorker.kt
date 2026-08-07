@@ -5,10 +5,8 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.prehmus.selli.data.notification.SharedEventFingerprintStore
 import com.prehmus.selli.data.notification.SharedEventNotifier
-import com.prehmus.selli.domain.merge.SharedFreeTimeCalculator
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.DateRange
-import com.prehmus.selli.domain.model.FreeSlot
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.WidgetSnapshot
 import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
@@ -30,8 +28,8 @@ class WidgetRefreshWorker(
             val today = LocalDate.now()
             val now = LocalDateTime.now()
             val range = DateRange(start = today, endInclusive = today.plusDays(LOOKAHEAD_DAYS))
-            // Ein Fetch für alles: Zeile 1 (nächster Partnertermin), Zeile 2 (nächste Wir-Zeit),
-            // Zeile 3 (nächster freier Slot) und die Benachrichtigungs-Erkennung teilen sich
+            // Ein Fetch für alles: Zeile 1 (nächster Partnertermin), Zeile 2 und 3
+            // (nächste Wir-Zeit plus Countdown) und die Benachrichtigungs-Erkennung teilen sich
             // dieselbe Terminliste — kein zusätzlicher Request an Google oder die ICS-Feeds.
             val events = mergeServiceFactory(applicationContext).mergedEvents(range)
             val nextEvent = NextPartnerEventSelector().select(
@@ -45,7 +43,6 @@ class WidgetRefreshWorker(
                 nextEvent = nextEvent,
                 updatedAt = now,
                 nextSharedEvent = NextSharedEventSelector().select(events = events, now = now),
-                nextFreeSlot = nextFreeSlot(range = range, events = events, now = now),
             )
 
             WidgetSnapshotStore(applicationContext).save(snapshot)
@@ -66,20 +63,6 @@ class WidgetRefreshWorker(
             }
         }
     }
-
-    /**
-     * Frühester gemeinsamer freier Block im Fenster, der noch nicht vorbei ist — heute zählen
-     * also nur Blöcke, die jetzt noch etwas übrig haben.
-     */
-    private fun nextFreeSlot(
-        range: DateRange,
-        events: List<CalendarEvent>,
-        now: LocalDateTime,
-    ): FreeSlot? =
-        SharedFreeTimeCalculator.freeBlocksInRange(range, events)
-            .asSequence()
-            .flatMap { (day, blocks) -> blocks.asSequence().map { block -> FreeSlot(day, block) } }
-            .firstOrNull { slot -> slot.block.end > now }
 
     /**
      * Wir-Zeit-Änderungen des Partners melden. Sind Benachrichtigungen aus, wird der komplette

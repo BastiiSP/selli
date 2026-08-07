@@ -34,11 +34,13 @@ import androidx.glance.text.TextStyle
 import com.prehmus.selli.MainActivity
 import com.prehmus.selli.R
 import com.prehmus.selli.data.widget.WidgetSnapshotStore
+import com.prehmus.selli.domain.countdown.WirZeitCountdownState
+import com.prehmus.selli.domain.countdown.calculateWirZeitCountdown
 import com.prehmus.selli.domain.model.CalendarEvent
-import com.prehmus.selli.domain.model.FreeSlot
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.WidgetSnapshot
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
@@ -111,11 +113,8 @@ private fun WidgetCard(snapshot: WidgetSnapshot?, today: LocalDate) {
 
         val allIntendedRowsEmpty = when (widgetTier) {
             WidgetTier.SMALL -> snapshot.nextEvent == null
-            WidgetTier.MEDIUM -> snapshot.nextEvent == null && snapshot.nextSharedEvent == null
-            WidgetTier.LARGE ->
-                snapshot.nextEvent == null &&
-                    snapshot.nextSharedEvent == null &&
-                    snapshot.nextFreeSlot == null
+            WidgetTier.MEDIUM, WidgetTier.LARGE ->
+                snapshot.nextEvent == null && snapshot.nextSharedEvent == null
         }
         if (allIntendedRowsEmpty) {
             FullCardEmptyHint(
@@ -155,7 +154,7 @@ private fun WidgetCard(snapshot: WidgetSnapshot?, today: LocalDate) {
 
             if (widgetTier == WidgetTier.LARGE) {
                 Spacer(modifier = GlanceModifier.height(8.dp))
-                NextFreeSlotRow(slot = snapshot.nextFreeSlot, today = today)
+                WirZeitCountdownRow(event = snapshot.nextSharedEvent, now = snapshot.updatedAt)
             }
         }
     }
@@ -252,7 +251,7 @@ private fun NextSharedEventRow(event: CalendarEvent?, today: LocalDate) {
             }
         }
     } else {
-        // Gleiche Bildsprache wie die Frei-Slot-Zeile darunter (32dp-Maskottchen statt
+        // Gleiche Bildsprache wie die Countdown-Zeile darunter (32dp-Maskottchen statt
         // reinem Farbpunkt) — vorher wirkte diese Zeile als einzige ohne Icon uneinheitlich.
         Row(
             modifier = GlanceModifier.fillMaxWidth(),
@@ -286,30 +285,37 @@ private fun NextSharedEventRow(event: CalendarEvent?, today: LocalDate) {
 }
 
 @Composable
-private fun NextFreeSlotRow(slot: FreeSlot?, today: LocalDate) {
+private fun WirZeitCountdownRow(event: CalendarEvent?, now: LocalDateTime) {
+    val countdown = calculateWirZeitCountdown(event = event, now = now, includeMinutes = false)
+    val mascot = when (countdown.state) {
+        WirZeitCountdownState.WALKING -> R.drawable.mascot_pondering
+        WirZeitCountdownState.ARRIVED_TODAY -> R.drawable.mascot_celebrating
+        WirZeitCountdownState.NONE_PLANNED -> R.drawable.mascot_empty_state
+    }
+    val valueText = when (countdown.state) {
+        WirZeitCountdownState.WALKING -> countdown.remainingText
+        WirZeitCountdownState.ARRIVED_TODAY -> "Heute ist es soweit!"
+        WirZeitCountdownState.NONE_PLANNED -> "Nichts in Sicht"
+    }
+
     Row(
         modifier = GlanceModifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Image(
-            provider = ImageProvider(
-                // Eigene Pose statt der Wir-Zeit-Zeile weiter unten (die nutzt die
-                // glücklich-hüpfende `mascot_celebrating`) — hier nachdenklich-neugierig,
-                // als würde das Maskottchen schon überlegen, was man mit der Zeit anfängt.
-                if (slot == null) R.drawable.mascot_empty_state else R.drawable.mascot_pondering,
-            ),
+            provider = ImageProvider(mascot),
             contentDescription = null,
             modifier = GlanceModifier.size(32.dp),
         )
         Spacer(modifier = GlanceModifier.width(12.dp))
         Column(modifier = GlanceModifier.defaultWeight()) {
             Text(
-                text = "Nächster freier Slot",
+                text = "Nächste Wir-Zeit in",
                 style = TextStyle(color = TextSoft, fontSize = 12.sp),
                 maxLines = 1,
             )
             Text(
-                text = if (slot == null) "Nichts in Sicht" else formatFreeSlot(slot, today),
+                text = valueText,
                 style = TextStyle(color = TextPrimary, fontSize = 15.sp, fontWeight = FontWeight.Bold),
                 maxLines = 1,
             )
@@ -346,7 +352,6 @@ private fun EmptyHint(mascot: Int, title: String, subtitle: String) {
 
 private val dayFormatter = DateTimeFormatter.ofPattern("EEE, dd.MM.", Locale.GERMAN)
 private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm", Locale.GERMAN)
-private val freeSlotTimeFormatter = DateTimeFormatter.ofPattern("H:mm", Locale.GERMAN)
 
 private fun dayLabel(day: LocalDate, today: LocalDate): String =
     when (day) {
@@ -364,8 +369,3 @@ internal fun formatEventTime(event: CalendarEvent, today: LocalDate): String {
         "$label ${event.start.format(timeFormatter)}–${event.end.format(timeFormatter)}"
     }
 }
-
-/** "Heute 14:00–18:00", "Morgen 9:00–13:00", "Mi, 05.08. 9:00–22:00". */
-internal fun formatFreeSlot(slot: FreeSlot, today: LocalDate): String =
-    "${dayLabel(slot.day, today)} " +
-        "${slot.block.start.format(freeSlotTimeFormatter)}–${slot.block.end.format(freeSlotTimeFormatter)}"
