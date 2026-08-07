@@ -20,7 +20,7 @@ import com.prehmus.selli.R
  * Das Selli-Maskottchen — die illustrierten Posen (an Rußmännchen-Ästhetik
  * angelehnt) stammen aus der einmaligen Bildgenerierung und liegen als
  * statische WebP-Assets unter res/drawable-nodpi. Die Stimmung wählt die Pose;
- * mascot_traveling bleibt für das Distanz-Feature (v3) reserviert.
+ * mascot_traveling wird in der Wanderweg-Szene des Wir-Zeit-Countdowns verwendet.
  */
 enum class MascotMood {
     /** Ruhiger Normalzustand (Header). */
