@@ -21,8 +21,8 @@
 - Das runde, stimmungsreaktive Maskottchen-Icon oben im `MascotHeader` (aktuell an `freeBlocks.isNotEmpty()` gekoppelt) entfällt ersatzlos — nicht zu verwechseln mit `CalendarUiState.bothFreeOnSelectedDay`, das für den Leertag-Hinweis in `DayDetail.kt` unverändert erhalten bleibt und von dieser Änderung **nicht** berührt wird.
 - Falls `./gradlew` mit `Unable to locate a Java Runtime` fehlschlägt: `export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"` vor dem Gradle-Aufruf setzen.
 - Owner-Feld pro Task ist Codex (per `codex:rescue`-Skill delegieren) oder Claude (Micro-Fix/Ausnahmefall) — siehe jeweiligen Task.
-- Die Gehpose in Task 5 ist **Pflicht**, kein optionales Polish — Task 6 baut direkt darauf auf, kein Platzhalter-Asset im fertigen Feature.
-- Der Skill `compose-animations` ist global installiert (verfügbar für Claude Code und Codex) und **muss** vor Task 6 konsultiert werden — die Wanderweg-Szene ist das visuelle Herzstück des Features und soll wirklich gut aussehen, nicht nur technisch funktionieren.
+- Die laufende Maskottchen-Pose für die Wanderweg-Szene ist bereits vorhanden: `R.drawable.mascot_traveling` (existiert seit dem ursprünglichen Asset-Setup, bisher ungenutzt, laut Code-Kommentar in `SelliMascot.kt` "für das Distanz-Feature (v3) reserviert" — dieser Countdown konkretisiert genau diesen v3-Backlog-Punkt, daher jetzt hierfür verwendet). Keine neue Bildgenerierung nötig.
+- Der Skill `compose-animations` ist global installiert (verfügbar für Claude Code und Codex) und **muss** vor Task 5 konsultiert werden — die Wanderweg-Szene ist das visuelle Herzstück des Features und soll wirklich gut aussehen, nicht nur technisch funktionieren.
 
 ---
 
@@ -183,7 +183,7 @@ git commit -m "Add created timestamp to CalendarEvent from Google Calendar"
   - `enum class WirZeitCountdownState { WALKING, ARRIVED_TODAY, NONE_PLANNED }`
   - `data class WirZeitCountdown(val state: WirZeitCountdownState, val progress: Float, val remainingText: String)`
   - `fun calculateWirZeitCountdown(event: CalendarEvent?, now: LocalDateTime, includeMinutes: Boolean = true): WirZeitCountdown`
-  - Diese Signatur ist der Vertrag für Task 3 (ViewModel), Task 4/6 (Header) und Task 7 (Widget).
+  - Diese Signatur ist der Vertrag für Task 3 (ViewModel), Task 4/5 (Header) und Task 6 (Widget).
 
 - [ ] **Step 1: Schreibe die fehlschlagenden Tests**
 
@@ -549,9 +549,9 @@ git commit -m "Fetch next Wir-Zeit event independently of the visible calendar r
 
 **Interfaces:**
 - Consumes: `calculateWirZeitCountdown(event, now, includeMinutes = true)` (Task 2), `CalendarUiState.nextWirZeitEvent` (Task 3), `CalendarViewModel::onWirZeitCountdownClick` (Task 3).
-- Produces: `MascotHeader`s neue öffentliche Parameter `nextWirZeitEvent: CalendarEvent?` und `onWirZeitCountdownClick: () -> Unit` (ersetzen `freeBlocks`/`onFreeBlockClick`) — Task 6 baut auf denselben Parametern auf und ändert nur die interne Darstellung des ausgeklappten Zustands.
+- Produces: `MascotHeader`s neue öffentliche Parameter `nextWirZeitEvent: CalendarEvent?` und `onWirZeitCountdownClick: () -> Unit` (ersetzen `freeBlocks`/`onFreeBlockClick`) — Task 5 baut auf denselben Parametern auf und ändert nur die interne Darstellung des ausgeklappten Zustands.
 
-Dieser Task liefert die **funktional vollständige** Version (Text + Tap-Navigation + minütliches Ticken, beide Header-Zustände), aber noch ohne die Wanderweg-Illustration — die kommt in Task 6 als rein visuelle Erweiterung obendrauf, ohne dass sich an den hier definierten Parametern noch etwas ändert.
+Dieser Task liefert die **funktional vollständige** Version (Text + Tap-Navigation + minütliches Ticken, beide Header-Zustände), aber noch ohne die Wanderweg-Illustration — die kommt in Task 5 als rein visuelle Erweiterung obendrauf, ohne dass sich an den hier definierten Parametern noch etwas ändert.
 
 - [ ] **Step 1: Signatur ändern, tote Free-Time-Codeteile entfernen**
 
@@ -586,7 +586,7 @@ Neue Imports ergänzen: `androidx.compose.runtime.LaunchedEffect`, `androidx.com
 ```kotlin
 /**
  * Countdown zur nächsten Wir-Zeit. Eingeklappt nur als Text, ausgeklappt als Wanderweg-Szene
- * (siehe [WirZeitCountdownScene], Task 6). Tippen springt in beiden Zuständen zum Termin.
+ * (siehe [WirZeitCountdownScene], Task 5). Tippen springt in beiden Zuständen zum Termin.
  * Tickt minütlich, solange diese Composable in der Komposition ist — kein Hintergrundlauf.
  */
 @Composable
@@ -632,7 +632,7 @@ private fun countdownLabel(countdown: com.prehmus.selli.domain.countdown.WirZeit
 
 `import androidx.compose.runtime.mutableStateOf`, `androidx.compose.runtime.remember`, `androidx.compose.runtime.setValue`, `androidx.compose.runtime.getValue` sind in der Datei bereits vorhanden (werden schon von `HeaderMenu` genutzt) — nicht doppelt ergänzen.
 
-**Platzhalter für Task 6:** `WirZeitCountdownScene` wird in diesem Task als einfache Text-Variante implementiert (identisch zur eingeklappten Darstellung, nur ohne Kollaps-Bedingung), damit Task 4 für sich allein vollständig funktioniert und testbar ist:
+**Platzhalter für Task 5:** `WirZeitCountdownScene` wird in diesem Task als einfache Text-Variante implementiert (identisch zur eingeklappten Darstellung, nur ohne Kollaps-Bedingung), damit Task 4 für sich allein vollständig funktioniert und testbar ist:
 
 ```kotlin
 @Composable
@@ -707,7 +707,7 @@ Expected: alle Tests weiterhin grün (dieser Task berührt keine unit-testbare L
 
 Diese Datei hat keine automatisierten UI-Tests (Projekt-Konvention: Compose-/Glance-UI wird per Smoke-/Gerätetest geprüft, siehe bestehende `SelliWidget.kt`, für die es ebenfalls keine UI-Tests gibt). Manuell prüfen:
 - Eingeklappter Header zeigt die Text-Zeile, kein Absturz ohne `nextWirZeitEvent` (NONE_PLANNED-Text erscheint).
-- Ausgeklappter Header zeigt denselben Text (noch ohne Szene, kommt in Task 6).
+- Ausgeklappter Header zeigt denselben Text (noch ohne Szene, kommt in Task 5).
 - Antippen des Textes springt zum richtigen Tag/Termin (`onWirZeitCountdownClick` → `openDeepLinkedEvent`).
 - Rundes Mood-Icon ist komplett verschwunden.
 
@@ -721,44 +721,7 @@ git commit -m "Replace header mood icon and free-time cards with Wir-Zeit countd
 
 ---
 
-## Task 5: Asset-Produktion — Gehpose fürs Maskottchen
-
-**Owner:** Claude (in Rücksprache mit Basti — Bildgenerierung, keine Codex-Aufgabe)
-
-**Pflicht-Task, kein optionales Polish.** Die Wanderweg-Szene in Task 6 braucht eine eigene Gehpose für das Maskottchen — keine der bestehenden Posen (`mascot_pushing`, `mascot_celebrating`, `mascot_idle`, `mascot_pondering`, `mascot_empty_state`) zeigt ein seitlich laufendes Maskottchen, und die Szene soll von Anfang an mit dem finalen Asset gebaut werden statt mit einem sichtbar unpassenden Platzhalter.
-
-**Files:**
-- Create: `app/src/main/res/drawable-nodpi/mascot_walking.webp`
-
-**Interfaces:**
-- Produces: `R.drawable.mascot_walking` — wird in Task 6 direkt für den `WirZeitCountdownState.WALKING`-Zustand verwendet (kein Platzhalter-Umweg über `mascot_pushing`).
-
-- [ ] **Step 1: Prompt formulieren**
-
-Prompt im Stil des bestehenden `STYLE_ANCHOR` aus `tools/generate-assets/generate_assets.py` schreiben: seitliche Gehpose, ein Bein leicht angehoben, Blickrichtung nach vorne/rechts (in Laufrichtung des Pfads in Task 6), sonst identische Rußmännchen-Ästhetik (rundlich, dunkel, große Kulleraugen) wie alle bestehenden Posen. `mascot_idle.webp` als Referenzbild verwenden (klarste Frontalansicht als Basis) — gleiches Muster wie zuvor bei `mascot_pushing` (mit `mascot_traveling` als Stil-Referenz) und `mascot_pondering`.
-
-- [ ] **Step 2: Bild erzeugen**
-
-Zuerst `tools/generate-assets/generate_assets.py` (automatisiertes OpenAI-Bildgenerierungs-Tool, `.env` mit API-Key liegt bereits lokal vor) mit dem neuen Prompt versuchen. Führt das nicht zu einem brauchbaren Ergebnis (bei früheren Posen ist das schon vorgekommen — Text-Prompt-Ansatz trifft nicht immer alle Details), Basti bitten, das Bild stattdessen selbst mit seinem eigenen Bildtool zu erzeugen (zwei Referenzbilder gleichzeitig: bestehende Pose als Stil-Referenz + der neue Prompt) und in Downloads abzulegen — das war der zuverlässigere Weg bei den letzten beiden neuen Posen.
-
-- [ ] **Step 3: Freistellen und verifizieren**
-
-Mit `rembg` (Python-API direkt, nicht die CLI — hatte zuvor fehlende Dependencies) freistellen. Echte Transparenz **per Pixel-Histogramm verifizieren, nicht der Vorschau vertrauen** — bei mehreren früheren Assets enthielt das Rohbild aus Downloads ein aufgemaltes Schachbrettmuster statt echter Transparenz (RGB statt RGBA). Auf 512×512 skalieren (Standardgröße aller Mascot-Assets).
-
-- [ ] **Step 4: Einsetzen**
-
-Als `mascot_walking.webp` unter `app/src/main/res/drawable-nodpi/` ablegen. Rohbild aus Downloads und Zwischendateien in `/tmp` danach löschen (wie bei allen bisherigen Asset-Runden).
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add app/src/main/res/drawable-nodpi/mascot_walking.webp
-git commit -m "Add walking mascot pose for the Wir-Zeit countdown path scene"
-```
-
----
-
-## Task 6: `MascotHeader` — Wanderweg-Szene für den ausgeklappten Zustand
+## Task 5: `MascotHeader` — Wanderweg-Szene für den ausgeklappten Zustand
 
 **Owner:** Codex
 
@@ -766,11 +729,11 @@ git commit -m "Add walking mascot pose for the Wir-Zeit countdown path scene"
 - Modify: `app/src/main/java/com/prehmus/selli/ui/calendar/MascotHeader.kt` (nur `WirZeitCountdownScene`, aus Task 4)
 
 **Interfaces:**
-- Consumes: `WirZeitCountdown` (Task 2), unverändert dieselbe Funktionssignatur wie in Task 4 — dieser Task ändert **nur den Funktionskörper** von `WirZeitCountdownScene`, keine Parameter, kein anderer Aufrufer betroffen. `R.drawable.mascot_walking` (Task 5, Pflicht-Voraussetzung für diesen Task — ohne das Asset nicht sinnvoll umsetzbar).
+- Consumes: `WirZeitCountdown` (Task 2), unverändert dieselbe Funktionssignatur wie in Task 4 — dieser Task ändert **nur den Funktionskörper** von `WirZeitCountdownScene`, keine Parameter, kein anderer Aufrufer betroffen. `R.drawable.mascot_traveling` (bereits im Repo vorhanden, siehe Global Constraints).
 
 **Qualitätsanspruch:** Diese Szene ist das visuelle Herzstück des Features und muss wirklich gut aussehen, nicht nur technisch funktionieren. Vor dem Schreiben den installierten Skill `compose-animations` (Jetpack-Compose-Animationsprinzipien, u. a. "kleinste passende API wählen", Timing/Choreografie mehrerer Werte) konsultieren und dessen Empfehlungen anwenden, statt nur die untenstehenden Codeausschnitte unverändert zu übernehmen — diese sind ein technischer Ausgangspunkt, keine gestalterische Endabnahme. Nach der Umsetzung auf einem Emulator/Gerät ansehen und bei Bedarf mehrfach nachjustieren (Timing, Easing, Proportionen, Abstände), bevor der Task als fertig gilt.
 
-Rein visuelle Erweiterung, keine neue Logik. Nutzt `R.drawable.mascot_walking` (Task 5) fürs Laufen, `mascot_celebrating` fürs Ankommen, `mascot_pondering` für "nichts geplant".
+Rein visuelle Erweiterung, keine neue Logik. Nutzt `R.drawable.mascot_traveling` (bereits vorhandene Reise-Pose mit Wanderbündel) fürs Laufen, `mascot_celebrating` fürs Ankommen, `mascot_pondering` für "nichts geplant". Zusätzlich den veralteten Kommentar in `SelliMascot.kt` ("mascot_traveling bleibt für das Distanz-Feature (v3) reserviert") entfernen/aktualisieren, da die Pose jetzt hier verwendet wird.
 
 - [ ] **Step 1: `WirZeitCountdownScene` durch die Wanderweg-Darstellung ersetzen**
 
@@ -784,7 +747,7 @@ private fun WirZeitCountdownScene(
     modifier: Modifier = Modifier,
 ) {
     val mascotDrawable = when (countdown.state) {
-        WirZeitCountdownState.WALKING -> R.drawable.mascot_walking
+        WirZeitCountdownState.WALKING -> R.drawable.mascot_traveling
         WirZeitCountdownState.ARRIVED_TODAY -> R.drawable.mascot_celebrating
         WirZeitCountdownState.NONE_PLANNED -> R.drawable.mascot_pondering
     }
@@ -933,7 +896,7 @@ git commit -m "Add animated path scene to the expanded Wir-Zeit countdown header
 
 ---
 
-## Task 7: Widget — `NextFreeSlotRow` durch Countdown-Zeile ersetzen
+## Task 6: Widget — `NextFreeSlotRow` durch Countdown-Zeile ersetzen
 
 **Owner:** Codex
 
@@ -1060,8 +1023,8 @@ git commit -m "Replace widget's next-free-slot row with a Wir-Zeit countdown row
 
 ## Selbstprüfung (bereits durchgeführt)
 
-- **Spec-Abdeckung:** Alle Abschnitte aus `docs/superpowers/specs/2026-08-05-wir-zeit-countdown-design.md` sind abgedeckt — `created`-Feld (Task 1), Fortschritts-/Text-Logik inkl. aller Randfälle (Task 2), unabhängiger 30-Tage-Fetch (Task 3), Header-Verhalten inkl. Tap/Ticken (Task 4), Gehpose (Task 5, Pflicht statt optional — auf Bastis Wunsch), Wanderweg-Visualisierung (Task 6), Widget-Zeile (Task 7). Lottie-Animation bleibt bewusst zurückgestellt (siehe Spec, "Zurückgestellt").
-- **Platzhalter-Scan:** Keine TBD/TODO-Stellen; Task 6 nutzt direkt das in Task 5 produzierte finale Asset statt eines Platzhalters.
-- **Typkonsistenz:** `calculateWirZeitCountdown(event, now, includeMinutes)`, `WirZeitCountdown`, `WirZeitCountdownState` werden in Task 2 definiert und in Task 4/6/7 identisch verwendet; `MascotHeader`s neue Parameter (`nextWirZeitEvent`, `onWirZeitCountdownClick`) sind zwischen Task 4 und der Aufrufstelle in `CalendarScreen.kt` konsistent.
+- **Spec-Abdeckung:** Alle Abschnitte aus `docs/superpowers/specs/2026-08-05-wir-zeit-countdown-design.md` sind abgedeckt — `created`-Feld (Task 1), Fortschritts-/Text-Logik inkl. aller Randfälle (Task 2), unabhängiger 30-Tage-Fetch (Task 3), Header-Verhalten inkl. Tap/Ticken (Task 4), Wanderweg-Visualisierung (Task 5), Widget-Zeile (Task 6). Lottie-Animation bleibt bewusst zurückgestellt (siehe Spec, "Zurückgestellt").
+- **Platzhalter-Scan:** Keine TBD/TODO-Stellen; Task 5 nutzt direkt das bereits vorhandene `mascot_traveling`-Asset statt eines Platzhalters oder einer neuen Bildgenerierung.
+- **Typkonsistenz:** `calculateWirZeitCountdown(event, now, includeMinutes)`, `WirZeitCountdown`, `WirZeitCountdownState` werden in Task 2 definiert und in Task 4/5/6 identisch verwendet; `MascotHeader`s neue Parameter (`nextWirZeitEvent`, `onWirZeitCountdownClick`) sind zwischen Task 4 und der Aufrufstelle in `CalendarScreen.kt` konsistent.
 - **Nicht angetastet (bewusst):** `CalendarUiState.freeBlocksOnSelectedDay`/`bothFreeOnSelectedDay`/`refreshFreeBlocks`/`openCreateSheetForFreeBlock` bleiben für `DayDetail`s Leertag-Hinweis vollständig erhalten (siehe Global Constraints) — kein Task dieses Plans verändert sie.
-- **Reihenfolge/Abhängigkeiten:** Task 5 (Asset) muss vor Task 6 (Szene) abgeschlossen sein, sonst fehlt `R.drawable.mascot_walking`. Task 5 kann parallel zu Task 3/4 laufen (keine Code-Abhängigkeit), Task 7 (Widget) kann parallel zu Task 4–6 laufen, sobald Task 2 fertig ist (beide hängen nur von der reinen Domain-Logik ab, nicht voneinander).
+- **Reihenfolge/Abhängigkeiten:** Task 1 → 2 sind strikt sequenziell. Danach können Task 3/4/5 (Header) und Task 6 (Widget) parallel laufen, sobald Task 2 fertig ist (beide hängen nur von der reinen Domain-Logik ab, nicht voneinander) — Task 5 hängt zusätzlich an Task 4 (nutzt dieselbe `WirZeitCountdownScene`-Funktion).
