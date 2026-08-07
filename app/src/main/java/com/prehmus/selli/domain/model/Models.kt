@@ -49,6 +49,12 @@ data class CalendarEvent(
      * den Wert beim Merge überschreiben. Für getimte Termine bleibt der Wert true.
      */
     val blocksSharedFreeTime: Boolean = !isAllDay,
+    /**
+     * Zeitpunkt, an dem der Termin ursprünglich angelegt/bekannt wurde (Google `Event.created`).
+     * Treibt die Fortschrittsberechnung des Wir-Zeit-Countdowns. Für ICS-Importe (Outlook,
+     * Dr.-Plano-Feed) gibt es kein verlässliches Äquivalent → bleibt `null`.
+     */
+    val created: LocalDateTime? = null,
 )
 
 /**

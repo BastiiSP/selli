@@ -34,6 +34,7 @@ class GoogleCalendarEventMapper(
             location = event.location,
             description = event.description,
             seriesId = event.recurringEventId,
+            created = event.created?.toInstant()?.atZone(zoneId)?.toLocalDateTime(),
         )
     }
 

@@ -7,10 +7,13 @@ import com.google.api.services.calendar.model.EventDateTime
 import com.google.api.services.calendar.model.Event.ExtendedProperties
 import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.Person
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.ZoneOffset
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -88,6 +91,35 @@ class GoogleCalendarEventMapperTest {
         )
 
         assertEquals("series-1", mapped.seriesId)
+    }
+
+    @Test
+    fun `maps created timestamp from Google event`() {
+        val createdInstant = Instant.parse("2026-07-20T09:15:00Z")
+        val event = timedEvent().setCreated(DateTime(createdInstant.toEpochMilli()))
+
+        val result = GoogleCalendarEventMapper(zoneId = ZoneOffset.UTC).toCalendarEvent(
+            event = event,
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.BASTI,
+            ownEmail = "basti@example.com",
+            partnerEmail = null,
+        )
+
+        assertEquals(createdInstant.atZone(ZoneOffset.UTC).toLocalDateTime(), result.created)
+    }
+
+    @Test
+    fun `created is null when Google omits it`() {
+        val result = mapper.toCalendarEvent(
+            event = timedEvent(),
+            source = CalendarSource.GOOGLE_OWN,
+            owner = Person.BASTI,
+            ownEmail = "basti@example.com",
+            partnerEmail = null,
+        )
+
+        assertNull(result.created)
     }
 
     @Test
