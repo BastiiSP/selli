@@ -13,10 +13,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.data.location.SelliLocationService
 import java.time.Instant
 import kotlinx.coroutines.delay
@@ -35,18 +33,14 @@ fun LocationScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Der Systemdialog läuft außerhalb der Komposition — der Berechtigungsstand wird deshalb
-    // bei jedem Zurückkommen in den Vordergrund neu gelesen, nicht nur einmal beim Aufbau.
+    // Der Systemdialog und die Systemeinstellungen laufen außerhalb der Komposition — der
+    // Berechtigungsstand wird deshalb bei jedem Zurückkommen in den Vordergrund neu gelesen,
+    // nicht nur einmal beim Aufbau.
     var permissionStep by remember { mutableStateOf(context.locationPermissionStep()) }
-    LaunchedEffect(lifecycleOwner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                permissionStep = context.locationPermissionStep()
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
+    LifecycleResumeEffect(Unit) {
+        permissionStep = context.locationPermissionStep()
+        onPauseOrDispose { }
     }
 
     // Tracking läuft, sobald die Vordergrund-Freigabe da ist. Die Hintergrund-Freigabe macht es

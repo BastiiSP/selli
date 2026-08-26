@@ -37,7 +37,7 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.MarkerComposable
 import com.google.maps.android.compose.rememberCameraPositionState
-import com.google.maps.android.compose.rememberMarkerState
+import com.google.maps.android.compose.rememberUpdatedMarkerState
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.model.LocationFreshness
 import com.prehmus.selli.domain.model.Person
@@ -113,8 +113,8 @@ fun LocationMap(
 private fun PersonMarker(location: PersonLocation, now: Instant) {
     val target = LatLng(location.latitude, location.longitude)
     val animated = animatedLatLng(target)
-    val markerState = rememberMarkerState(position = animated)
-    LaunchedEffect(animated) { markerState.position = animated }
+    // rememberUpdatedMarkerState zieht die Position selbst nach, sobald sich `animated` ändert.
+    val markerState = rememberUpdatedMarkerState(position = animated)
 
     val freshness = location.freshness(now)
     MarkerComposable(
