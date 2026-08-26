@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -16,18 +15,17 @@ import java.time.LocalDate
 import com.prehmus.selli.ui.auth.AuthUiState
 import com.prehmus.selli.ui.auth.AuthViewModel
 import com.prehmus.selli.ui.auth.SignInScreen
-import com.prehmus.selli.ui.calendar.CalendarScreen
-import com.prehmus.selli.ui.calendar.CalendarViewModel
+import com.prehmus.selli.ui.shell.SelliShell
 
 /** Zieltermin einer angetippten Wir-Zeit-Benachrichtigung. */
 data class SelliDeepLink(val day: LocalDate, val eventKey: EventKey)
 
 /**
- * App-Wurzel: Anmeldegate vor der Kalenderansicht. Die Abhängigkeiten liefert
- * die MainActivity über [AppDependencies].
+ * App-Wurzel: Anmeldegate vor dem App-Gerüst. Die Abhängigkeiten liefert die
+ * MainActivity über [AppDependencies].
  *
- * [deepLink] kommt aus den Intent-Extras einer Benachrichtigung und wird angewandt, sobald der
- * Kalender hinter dem Anmeldegate steht — ohne Anmeldung gibt es keinen Termin zu zeigen.
+ * [deepLink] kommt aus den Intent-Extras einer Benachrichtigung und wird angewandt, sobald
+ * das Gerüst hinter dem Anmeldegate steht — ohne Anmeldung gibt es keinen Termin zu zeigen.
  */
 @Composable
 fun SelliApp(
@@ -51,28 +49,16 @@ fun SelliApp(
         modifier = Modifier.fillMaxSize(),
         color = MaterialTheme.colorScheme.background,
     ) {
-        when (authState) {
-            is AuthUiState.Ready -> {
-                val calendarViewModel: CalendarViewModel = viewModel(
-                    factory = CalendarViewModel.factory(
-                        dependencies.calendarMergeService,
-                        dependencies.calendarRepository,
-                        dependencies.eventCustomizationRepository,
-                    ),
-                )
-                LaunchedEffect(deepLink) {
-                    val target = deepLink ?: return@LaunchedEffect
-                    calendarViewModel.openDeepLinkedEvent(target.day, target.eventKey)
-                    onDeepLinkHandled()
-                }
-                CalendarScreen(
-                    viewModel = calendarViewModel,
-                    onSwitchAccount = authViewModel::switchAccount,
-                    suggestionRepository = dependencies.placeSuggestionRepository,
-                )
-            }
+        when (val state = authState) {
+            is AuthUiState.Ready -> SelliShell(
+                dependencies = dependencies,
+                ownPerson = state.account.person,
+                onSwitchAccount = authViewModel::switchAccount,
+                deepLink = deepLink,
+                onDeepLinkHandled = onDeepLinkHandled,
+            )
             else -> SignInScreen(
-                state = authState,
+                state = state,
                 onSignIn = authViewModel::signIn,
                 onConnectPartner = authViewModel::connectPartner,
                 onConsentResult = authViewModel::onConsentResult,

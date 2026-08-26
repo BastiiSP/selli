@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -36,7 +35,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,7 +46,6 @@ import com.prehmus.selli.domain.model.SourceLoadError
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.ui.settings.rememberLayoutPreferences
 import com.prehmus.selli.ui.event.CreateEventSheet
-import com.prehmus.selli.ui.event.CustomizationManagerSheet
 import com.prehmus.selli.ui.event.EditEventSheet
 import com.prehmus.selli.ui.event.EventActionsSheet
 import java.time.LocalDate
@@ -67,14 +64,12 @@ import java.util.Locale
 @Composable
 fun CalendarScreen(
     viewModel: CalendarViewModel,
-    onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier,
     // Adressvorschläge fürs Ortsfeld der Sheets; null = reines Textfeld (Previews/Tests).
     suggestionRepository: PlaceSuggestionRepository? = null,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
-    var showSwitchAccountDialog by remember { mutableStateOf(false) }
     // Gemeinsame, dauerhaft gespeicherte Layout-Aufteilung für alle drei Ansichten.
     val layout = rememberLayoutPreferences()
     // Höhe des mittleren Bereichs (Kalender + Liste) in px — Basis, um Zieh-Deltas des
@@ -144,18 +139,11 @@ fun CalendarScreen(
                 .fillMaxSize()
                 .padding(bottom = innerPadding.calculateBottomPadding()),
         ) {
-            MascotHeader(
+            CalendarPeriodBar(
                 title = calendarHeaderTitle(uiState.viewMode, uiState.visibleMonth, uiState.selectedDay),
-                isSyncing = uiState.isSyncing,
-                nextWirZeitEvent = uiState.nextWirZeitEvent,
-                collapsed = layout.headerCollapsed,
-                onToggleCollapsed = { layout.updateHeaderCollapsed(!layout.headerCollapsed) },
                 onPrevious = goPrevious,
                 onNext = goNext,
                 onRefresh = { viewModel.refresh(forceNetwork = true) },
-                onManageCustomizations = viewModel::openCustomizationManager,
-                onSwitchAccount = { showSwitchAccountDialog = true },
-                onWirZeitCountdownClick = viewModel::onWirZeitCountdownClick,
             )
             ViewModeSwitcher(
                 selected = uiState.viewMode,
@@ -305,37 +293,6 @@ fun CalendarScreen(
             onSave = viewModel::saveEventOverrides,
             onDismiss = viewModel::dismissEditing,
             suggestionRepository = suggestionRepository,
-        )
-    }
-
-    if (uiState.isCustomizationManagerOpen) {
-        CustomizationManagerSheet(
-            customizations = uiState.storedCustomizations,
-            onRemove = viewModel::removeCustomization,
-            onDelete = viewModel::deleteFromCustomizationManager,
-            onDismiss = viewModel::dismissCustomizationManager,
-        )
-    }
-
-    if (showSwitchAccountDialog) {
-        AlertDialog(
-            onDismissRequest = { showSwitchAccountDialog = false },
-            title = { Text("Konto wechseln?") },
-            text = {
-                Text(
-                    "Selli vergisst eure Verknüpfung auf diesem Gerät und startet wieder " +
-                        "bei der Anmeldung. Dein Google-Konto und eure Termine bleiben unverändert.",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showSwitchAccountDialog = false
-                    onSwitchAccount()
-                }) { Text("Konto wechseln") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSwitchAccountDialog = false }) { Text("Abbrechen") }
-            },
         )
     }
 }
