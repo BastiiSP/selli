@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 val localProperties = Properties().apply {
@@ -51,6 +52,19 @@ android {
             "MELLI_ICS_FEED_URL",
             buildConfigStringProperty("selli.melliIcsFeedUrl"),
         )
+        buildConfigField(
+            "String",
+            "SUPABASE_URL",
+            buildConfigStringProperty("selli.supabaseUrl"),
+        )
+        buildConfigField(
+            "String",
+            "SUPABASE_ANON_KEY",
+            buildConfigStringProperty("selli.supabaseAnonKey"),
+        )
+
+        // Die Maps SDK liest ihren Schlüssel aus dem Manifest, nicht aus BuildConfig.
+        manifestPlaceholders["MAPS_API_KEY"] = localProperties.getProperty("selli.mapsApiKey", "")
     }
 
     buildTypes {
@@ -111,6 +125,13 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(platform(libs.supabase.bom))
+    implementation(libs.supabase.postgrest)
+    implementation(libs.supabase.realtime)
+    implementation(libs.supabase.auth)
+    implementation(libs.ktor.client.okhttp)
+    implementation(libs.maps.compose)
+    implementation(libs.play.services.location)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

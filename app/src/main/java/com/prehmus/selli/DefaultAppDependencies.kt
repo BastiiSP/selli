@@ -5,8 +5,10 @@ import com.prehmus.selli.data.customization.FileEventCustomizationRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
+import com.prehmus.selli.data.location.SupabaseLocationRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.places.PlacesAutocompleteRepository
+import com.prehmus.selli.data.supabase.SelliSupabaseClient
 import com.prehmus.selli.data.places.readAndroidAppIdentity
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
@@ -15,6 +17,7 @@ import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LocationRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.util.concurrent.atomic.AtomicReference
@@ -86,4 +89,25 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
             androidCertSha1 = appIdentity?.certSha1,
             logger = AndroidCalendarLogger,
         )
+
+    // Standortfreigabe: das erste eigene Backend der App, ausschliesslich fuer Positionen.
+    // Die bestehende Google-Anmeldung bleibt unveraendert Quelle der Wahrheit — googleRepository
+    // liefert hier nur zusaetzlich das rohe ID-Token, mit dem sich Supabase EINMALIG koppelt
+    // (danach fuehrt es eine eigene, selbst erneuerte Sitzung).
+    private val supabaseClient = SelliSupabaseClient(
+        supabaseUrl = BuildConfig.SUPABASE_URL,
+        supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+        idTokenProvider = googleRepository,
+        logger = AndroidCalendarLogger,
+    )
+
+    override val locationRepository: LocationRepository = SupabaseLocationRepository(
+        client = supabaseClient,
+        ownPerson = { ownPerson.get() },
+        logger = AndroidCalendarLogger,
+    )
+
+    // Ohne Supabase-Zugangsdaten bleibt der Standort-Tab bei einem Hinweis, statt eine leere
+    // Karte zu zeigen — gleiches Prinzip wie beim fehlenden Places-Schluessel.
+    override val isLocationSharingConfigured: Boolean = supabaseClient.isConfigured
 }

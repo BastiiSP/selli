@@ -34,6 +34,7 @@ import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
+import com.prehmus.selli.domain.repository.GoogleIdTokenProvider
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -57,7 +58,7 @@ class GoogleCalendarDataRepository(
     ),
     logger: CalendarLogger = NoOpCalendarLogger,
     now: () -> Long = { System.currentTimeMillis() },
-) : GoogleCalendarRepository, CalendarRepository, SessionRepository {
+) : GoogleCalendarRepository, CalendarRepository, SessionRepository, GoogleIdTokenProvider {
     private val credentialManager = CredentialManager.create(context.applicationContext)
     private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
     private val rruleFormatter = GoogleRruleFormatter(zoneId)
@@ -84,6 +85,7 @@ class GoogleCalendarDataRepository(
             }
 
             val credential = GoogleIdTokenCredential.createFrom(customCredential.data)
+            persistGoogleIdToken(credential.idToken)
             val email = credential.email
                 ?: return AuthResult.Error("Google sign-in did not return an email address.")
             val account = Account(
@@ -267,8 +269,12 @@ class GoogleCalendarDataRepository(
     override suspend fun resetSession() {
         preferences.edit().apply {
             sessionKeysToReset(preferences.all.keys).forEach { remove(it) }
+            remove(KEY_GOOGLE_ID_TOKEN)
         }.apply()
     }
+
+    override fun lastGoogleIdToken(): String? =
+        googleIdTokenOrNull(preferences.getString(KEY_GOOGLE_ID_TOKEN, null))
 
     private suspend fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
 
@@ -368,6 +374,12 @@ class GoogleCalendarDataRepository(
             .apply()
     }
 
+    internal fun persistGoogleIdToken(idToken: String?) {
+        preferences.edit()
+            .putString(KEY_GOOGLE_ID_TOKEN, idToken)
+            .apply()
+    }
+
     private fun requireStoredAccount(prefix: String): Account =
         requireNotNull(storedAccount(prefix)) {
             "Missing stored Google account for '$prefix'. Call signIn and grantMutualAccess first."
@@ -397,6 +409,7 @@ class GoogleCalendarDataRepository(
         const val EMAIL_SUFFIX = "email"
         const val DISPLAY_NAME_SUFFIX = "display_name"
         const val PERSON_SUFFIX = "person"
+        const val KEY_GOOGLE_ID_TOKEN = "google_id_token"
         const val RECOVERABLE_AUTH_MESSAGE =
             "Google braucht einmalig deine Zustimmung für den Kalenderzugriff."
     }
@@ -429,3 +442,10 @@ internal fun sessionKeysToReset(keys: Set<String>): Set<String> =
     keys.filterTo(mutableSetOf()) { key ->
         key.startsWith("own_") || key.startsWith("partner_")
     }
+
+/**
+ * Ein gespeichertes, aber leeres Google-ID-Token ist kein Token. Als reine Funktion neben
+ * [sessionState]/[sessionKeysToReset], damit sie ohne Android-Framework testbar bleibt — der
+ * Repository-Konstruktor selbst laesst sich im JVM-Unit-Test nicht bauen (CredentialManager).
+ */
+internal fun googleIdTokenOrNull(stored: String?): String? = stored?.takeUnless(String::isBlank)

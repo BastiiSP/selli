@@ -5,6 +5,7 @@ import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LocationRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 
@@ -23,4 +24,13 @@ interface AppDependencies {
 
     /** Adressvorschläge für das Ortsfeld — liefert bei fehlendem Schlüssel einfach nichts. */
     val placeSuggestionRepository: PlaceSuggestionRepository
+
+    /** Positionen beider Personen (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
+    val locationRepository: LocationRepository
+
+    /**
+     * false, wenn in `local.properties` keine Supabase-Zugangsdaten liegen — dann zeigt der
+     * Standort-Tab einen Hinweis statt einer leeren Karte, und es läuft kein Tracking.
+     */
+    val isLocationSharingConfigured: Boolean
 }

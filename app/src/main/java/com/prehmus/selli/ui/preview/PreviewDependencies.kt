@@ -12,17 +12,22 @@ import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.places.LocationSuggestion
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LocationRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /**
  * In-Memory-Fakes für Compose-Previews und für die Übergangszeit, bis die
@@ -195,6 +200,38 @@ class PreviewDependencies : AppDependencies {
                 else -> null
             }
         }
+
+    // Zwei feste Positionen (Kassel / Osnabrück – die echte Fernbeziehungs-Distanz), damit die
+    // Karten-Preview beide Marker zeigt, ohne Supabase und ohne Standort-Berechtigung.
+    override val locationRepository: LocationRepository = object : LocationRepository {
+        override fun observeLocations(): Flow<List<PersonLocation>> = flowOf(
+            listOf(
+                PersonLocation(
+                    person = Person.BASTI,
+                    latitude = 51.3127,
+                    longitude = 9.4797,
+                    accuracyMeters = 12.0,
+                    speedMetersPerSecond = null,
+                    isMoving = false,
+                    updatedAt = Instant.now(),
+                ),
+                PersonLocation(
+                    person = Person.MELLI,
+                    latitude = 52.2799,
+                    longitude = 8.0472,
+                    accuracyMeters = 25.0,
+                    speedMetersPerSecond = 21.4,
+                    isMoving = true,
+                    updatedAt = Instant.now().minusSeconds(240),
+                ),
+            ),
+        )
+
+        override suspend fun publishOwnLocation(location: PersonLocation): Result<Unit> =
+            Result.success(Unit)
+    }
+
+    override val isLocationSharingConfigured: Boolean = true
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {
         override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> {

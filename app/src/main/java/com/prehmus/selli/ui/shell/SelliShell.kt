@@ -4,19 +4,13 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -30,6 +24,8 @@ import com.prehmus.selli.ui.SelliDeepLink
 import com.prehmus.selli.ui.calendar.CalendarScreen
 import com.prehmus.selli.ui.calendar.CalendarViewModel
 import com.prehmus.selli.ui.home.HomeScreen
+import com.prehmus.selli.ui.location.LocationScreen
+import com.prehmus.selli.ui.location.LocationViewModel
 import com.prehmus.selli.ui.settings.SettingsScreen
 import com.prehmus.selli.ui.settings.SettingsViewModel
 
@@ -113,7 +109,15 @@ fun SelliShell(
                     },
                 )
             }
-            composable(SelliDestination.LOCATION.route) { PlaceholderScreen(SelliDestination.LOCATION.label) }
+            composable(SelliDestination.LOCATION.route) {
+                val locationViewModel: LocationViewModel = viewModel(
+                    factory = LocationViewModel.factory(
+                        repository = dependencies.locationRepository,
+                        isConfigured = dependencies.isLocationSharingConfigured,
+                    ),
+                )
+                LocationScreen(viewModel = locationViewModel)
+            }
             composable(SETTINGS_ROUTE) {
                 val settingsViewModel: SettingsViewModel = viewModel(
                     factory = SettingsViewModel.factory(dependencies.sessionRepository),
@@ -147,17 +151,5 @@ internal fun NavHostController.switchTo(destination: SelliDestination) {
         popUpTo(SelliStartDestination.route) { saveState = true }
         launchSingleTop = true
         restoreState = true
-    }
-}
-
-@Composable
-private fun PlaceholderScreen(label: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(text = label, style = MaterialTheme.typography.headlineSmall)
     }
 }
