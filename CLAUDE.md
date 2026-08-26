@@ -7,7 +7,8 @@ Projektkontext für Claude Code in diesem Repository. Pendant zu `AGENTS.md` (do
 Selli ist eine native Android-Kalender-App für Basti und seine Freundin Melanie ("Melli") Spies. Beide leben ca. zwei Autostunden voneinander entfernt (Fernbeziehung) und haben aktuell keinen gemeinsamen Überblick über ihre Termine. Selli führt die relevanten Kalender beider zusammen, ohne bestehende Kalender-Apps zu ersetzen.
 
 - **Stack:** Kotlin + Jetpack Compose, Widget (v2) via Jetpack Glance
-- **Kein eigenes Backend** – die App spricht direkt mit externen Diensten:
+- **Backend nur fürs Standort-Feature:** Kalender-Daten laufen weiterhin ohne eigenes Backend direkt gegen externe Dienste; seit 26.08.2026 gibt es zusätzlich eine Supabase-Instanz (Free Tier) **ausschließlich** für die Live-Standorte der beiden Personen.
+- Die App spricht direkt mit externen Diensten:
   - Google Calendar API für Bastis und Mellis privaten Kalender (inkl. automatischem ACL-Insert-Call für gegenseitige "Details anzeigen"-Freigabe)
   - Ein veröffentlichter ICS-/Webcal-Feed für Bastis MS365-Arbeitskalender (read-only, periodisch abgerufen und geparst)
 - Push/Realtime-Sync ist bewusst auf später verschoben – MVP arbeitet mit Refresh beim App-Öffnen
@@ -52,6 +53,8 @@ Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und 
 
 **Profil & Einstellungen (`ui/settings/SettingsScreen.kt`):** Vollbild-Route über dem Gerüst, erreichbar über den Avatar im Header. Enthält Profilkarte, verknüpftes Google-Konto (eigenes + Partner), „Ausgeblendet & angepasst" und „Konto wechseln" – die letzten beiden saßen früher im Überlaufmenü des Kalender-Headers, das mit `MascotHeader.kt` entfallen ist.
 
+**Standort-Tab (`ui/location/`):** Karte mit der Live-Position beider Personen. Jede Position ist ein Kartenmarker in der Personenfarbe mit dem gezeichneten Avatar-Gesicht (`location_pin_basti.webp` / `location_pin_melli.webp`, Anker auf der Pin-Spitze bei 0,92 statt 1,0 – darunter sitzt der Schlagschatten). Kartenstile in `res/raw/map_style_selli.json` / `map_style_selli_night.json` (warme, gedämpfte Töne, POI-/Transit-Labels aus, folgt dem System-Theme). Markerbewegung wird linear über 1,2 s animiert – eine Autofahrt verläuft gleichmäßig, Easing würde ein Bremsen vortäuschen. Statt einer Entfernungsanzeige steht unter jedem Marker die Frische („gerade jetzt" / „vor N Min." / „vor längerer Zeit"). **Bewusst nicht enthalten:** kein Ein/Aus-Schalter für die Standortfreigabe, keine Distanzanzeige.
+
 **Asset-Produktion:** Alle illustrierten Assets (Maskottchen-Posen, Avatare, App-Icon) werden über OpenAI-Bildgenerierung **einmalig während der Entwicklung** erzeugt und als statische Bilddateien ins Projekt gepackt (z. B. unter `res/drawable/`). Kein API-Key, keine Laufzeitkosten, keine Internetabhängigkeit für dieses Feature selbst.
 
 ## Coding-Konventionen
@@ -61,7 +64,7 @@ Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und 
   - `data/` – API-Clients, Repositories (Codex-Territorium)
   - `domain/` – Merge-Logik, Freizeit-Abgleich, sonstige Geschäftslogik (Codex-Territorium)
   - `ui/` – Compose-Screens, Theme, Components (Claude-Territorium)
-- **Keine Secrets im Code.** Der ICS-Link (enthält Zugriffstoken) und die Google-OAuth-Client-ID gehören ausschließlich in lokale, nicht versionierte `local.properties` (`selli.googleServerClientId`, `selli.icsFeedUrl`) und werden als `BuildConfig`-Felder bereitgestellt – siehe README. Nie committen.
+- **Keine Secrets im Code.** Der ICS-Link (enthält Zugriffstoken) und die Google-OAuth-Client-ID gehören ausschließlich in lokale, nicht versionierte `local.properties` (`selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`) und werden als `BuildConfig`-Felder bereitgestellt – siehe README. Nie committen.
 
 ## Build & Test
 
@@ -83,14 +86,17 @@ MVP-Kern ist fertig und seitdem in vielen Runden gewachsen: Google-Kalender-Anbi
 - **Wir-Zeit-Countdown:** ersetzt die Freie-Zeit-Anzeige im Header und die "nächster freier Slot"-Widget-Zeile — siehe Maskottchen-Abschnitt oben.
 - **Termin entfernen (vereinheitlicht):** Aktionen-Sheet bietet jetzt für jeden Termin eine Entfernen-Option — eigener Termin → echtes Löschen (unverändert), eigene Wir-Zeit → echtes Löschen (storniert automatisch beim Partner), **Wir-Zeit der Partnerin/des Partners → neue Lösch-Anfrage** (Markierung `selli:deleteRequestedBy` in `extendedProperties.shared` + Benachrichtigung über das bestehende Wir-Zeit-System, kein neues Backend), alles andere → weiterhin nur lokales Ausblenden. „Ausgeblendet & angepasst" hat dafür ein Mülleimer-Icon pro Zeile bekommen. Spec/Plan: `docs/superpowers/specs/2026-08-07-termin-entfernen-design.md` / `docs/superpowers/plans/2026-08-07-termin-entfernen.md`.
 - **App-Grundgerüst statt Einzelbildschirm (26.08.2026):** `navigation-compose`, globaler Header, Bottom-Navigation mit drei Zielen, eigener Homescreen, neuer Profil-/Einstellungsbereich. `ui/calendar/MascotHeader.kt` (754 Zeilen, trug fünf Dinge gleichzeitig) ist dabei aufgelöst worden – die Wanderweg-Szene ist nach `ui/home/`, Wortmarke/Avatare in den globalen Header, Zeitraumnavigation in `CalendarPeriodBar`, die Menüeinträge in die Einstellungen gewandert. `LayoutPreferences.headerCollapsed` hat seitdem keinen Leser mehr (bleibt erhalten, damit gespeicherte Gerätewerte nicht ins Leere laufen). Spec/Plan: `docs/superpowers/specs/2026-08-26-grundgeruest-standort-design.md` / `docs/superpowers/plans/2026-08-26-app-grundgeruest.md`.
+- **Standort-Feature mit Supabase (26.08.2026):** erstes eigenes Backend, ausschließlich für Positionen. Die bestehende Google-Anmeldung bleibt Quelle der Wahrheit und wird nur **ergänzt**: `GoogleIdTokenProvider` (additiv in `GoogleCalendarDataRepository`) gibt das rohe Google-ID-Token heraus, mit dem sich Supabase **einmalig** per `signInWithIdToken` koppelt – danach führt supabase-kt eine eigene, selbst erneuerte Sitzung. Eine Zeile pro Person in `public.locations` per Upsert, Realtime über `postgres_changes`, 60-s-Polling-Fallback. Zugriff ist über eine von Hand befüllte Allowlist (`public.selli_members` + `is_selli_member()`) auf genau zwei Konten begrenzt. Migration liegt versioniert in `supabase/migrations/`. Tracking über einen Foreground-Service mit **adaptiver Taktung** (`domain/location/LocationCadence.kt`): Stillstand 5 min / WLAN-Fixes / 150-m-Filter (~0,5 %/h), Bewegung 30 s / GPS / gebündelt (~2–4 %/h) – Vorbild ist Googles Standortfreigabe, nicht WhatsApps Dauer-GPS. Spec/Plan: `docs/superpowers/specs/2026-08-26-grundgeruest-standort-design.md` / `docs/superpowers/plans/2026-08-26-standort-feature.md`.
 - **Fix: `GOOGLE_OWN`-Fehltagging bei Einladungen.** `fetchEvents()` markierte bislang jeden Termin aus dem eigenen Kalender-Fetch als `GOOGLE_OWN`, auch wenn man nur eingeladen (nicht Organisator) war — führte zu doppelt angezeigten Partner-Wir-Zeit-Terminen und einem irreführenden "Endgültig löschen"-Button (löscht bei einem fremden Termin nach Google-Semantik nur die eigene Teilnahme, nicht den ganzen Termin). Behoben über `Event.isOrganizedByPartner(partnerEmail)`, das erstmals das Google-Feld `organizer`/`organizer.self` auswertet.
 
-**272 Unit-Tests grün** (Stand 26.08.2026). Bekannte, bewusst in Kauf genommene Einschränkungen (kein Bug):
+**303 Unit-Tests grün** (Stand 26.08.2026). Bekannte, bewusst in Kauf genommene Einschränkungen (kein Bug):
 - MONTHLY/YEARLY-RRULEs aus ICS-Feeds erscheinen nur als Einzeltermin am Startdatum
 - ICS-Termine haben kein `created`-Datum → im Wir-Zeit-Countdown-Wanderweg steht das Maskottchen dort dauerhaft am Weganfang
 - Sehr alte Google-Termine ganz ohne `organizer`-Feld werden vom Dopplungs-Fix nicht erfasst (kein Fallback über `iCalUID`)
 - App-Icon-Vordergrund evtl. zu randvoll für manche Launcher-Masken (siehe Designkonzept oben)
 - Merkregel: Text/Icons auf `selliGradient()`- oder `personColor()`-Flächen nie hart `Color.White` geben, sondern `onAccentColor()` verwenden (Dark-Mode-Kontrast)
+
+**Standort-Feature: noch nicht scharfgestellt.** Der Code ist vollständig und grün, aber die Supabase-Instanz existiert noch nicht. Es fehlen (Basti): Projekt anlegen, `supabase/migrations/20260826120000_selli_locations.sql` ausführen, `selli_members` mit den zwei echten Adressen füllen, Google-Auth-Provider mit `selli.googleServerClientId` aktivieren, dann `selli.supabaseUrl`/`selli.supabaseAnonKey`/`selli.mapsApiKey` in `local.properties`. Ohne diese Werte zeigt der Standort-Tab einen Hinweis statt einer leeren Karte und es läuft kein Tracking.
 
 **Ausstehende Gerätetests** (funktional/unabhängig verifiziert, aber noch nicht am echten Gerät mit beiden echten Konten bestätigt): Wir-Zeit-Countdown-Fortschrittsposition, Termin-entfernen-Lösch-Anfrage inkl. der offenen technischen Kernfrage, ob ein eingeladener Teilnehmer `extendedProperties.shared` auf seiner eigenen Kopie schreiben darf (Fallback ist getestet und greift, falls nicht), Dopplungs-Fix.
 
