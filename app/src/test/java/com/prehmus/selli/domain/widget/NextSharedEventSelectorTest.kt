@@ -146,6 +146,39 @@ class NextSharedEventSelectorTest {
         assertEquals(alphaWithEarlierId, selector.select(listOf(alphaWithLaterId, alphaWithEarlierId), now))
     }
 
+    @Test
+    fun `selectUpcoming returns future shared events in order and respects the limit`() {
+        val third = event(id = "c", start = now.plusDays(3), end = now.plusDays(3).plusHours(2))
+        val first = event(id = "a", start = now.plusDays(1), end = now.plusDays(1).plusHours(2))
+        val second = event(id = "b", start = now.plusDays(2), end = now.plusDays(2).plusHours(2))
+        val past = event(id = "past", start = now.minusDays(2), end = now.minusDays(1))
+
+        val result = selector.selectUpcoming(listOf(third, first, second, past), now, limit = 2)
+
+        assertEquals(listOf("a", "b"), result.map { it.id })
+    }
+
+    @Test
+    fun `selectUpcoming skips non-blocking all-day markers`() {
+        val marker = event(id = "marker", isAllDay = true, blocksSharedFreeTime = false)
+
+        val result = selector.selectUpcoming(listOf(marker), now, limit = 5)
+
+        assertEquals(emptyList<String>(), result.map { it.id })
+    }
+
+    @Test
+    fun `select returns the first element of selectUpcoming`() {
+        val later = event(id = "later", start = now.plusDays(2), end = now.plusDays(2).plusHours(1))
+        val soon = event(id = "soon", start = now.plusDays(1), end = now.plusDays(1).plusHours(1))
+        val events = listOf(later, soon)
+
+        assertEquals(
+            selector.selectUpcoming(events, now, limit = 5).first(),
+            selector.select(events, now),
+        )
+    }
+
     private fun event(
         id: String,
         title: String = "Event",

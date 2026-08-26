@@ -419,6 +419,24 @@ class CalendarViewModelTest {
             assertEquals(CustomizationTarget.Occurrence(event.key()), saved.target)
         }
 
+    @Test
+    fun `upcoming wir zeit events expose the next shared events in order`() =
+        runTest(mainDispatcherRule.dispatcher) {
+            // Bewusst relativ zu echtem "heute": refreshNextWirZeitEvent nimmt LocalDate.now()
+            // als Fensterstart und LocalDateTime.now() als Vergleichszeitpunkt.
+            val today = LocalDate.now()
+            val second = partnerTogetherEvent(id = "second", day = today.plusDays(2))
+            val first = partnerTogetherEvent(id = "first", day = today.plusDays(1))
+            val past = partnerTogetherEvent(id = "past", day = today.minusDays(3))
+            val fixture = fixture(mergedEvents = listOf(second, past, first))
+
+            advanceUntilIdle()
+
+            val state = fixture.viewModel.uiState.value
+            assertEquals(listOf("first", "second"), state.upcomingWirZeitEvents.map { it.id })
+            assertEquals("first", state.nextWirZeitEvent?.id)
+        }
+
     private fun partnerTogetherEvent(id: String, day: LocalDate): CalendarEvent =
         CalendarEvent(
             id = id,

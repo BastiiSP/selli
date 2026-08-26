@@ -12,6 +12,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -24,9 +25,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.prehmus.selli.AppDependencies
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.ui.SelliDeepLink
 import com.prehmus.selli.ui.calendar.CalendarScreen
 import com.prehmus.selli.ui.calendar.CalendarViewModel
+import com.prehmus.selli.ui.home.HomeScreen
+import com.prehmus.selli.ui.settings.SettingsScreen
+import com.prehmus.selli.ui.settings.SettingsViewModel
 
 /**
  * App-Gerüst hinter dem Anmeldegate: globaler Header, drei gleichwertige Ziele in der
@@ -90,9 +95,36 @@ fun SelliShell(
                     suggestionRepository = dependencies.placeSuggestionRepository,
                 )
             }
-            composable(SelliDestination.HOME.route) { PlaceholderScreen(SelliDestination.HOME.label) }
+            composable(SelliDestination.HOME.route) {
+                val uiState by calendarViewModel.uiState.collectAsState()
+                HomeScreen(
+                    uiState = uiState,
+                    // Die Szene führt immer zum nächsten Wir-Zeit-Termin — dieselbe
+                    // ViewModel-Aktion, die früher der Header-Countdown ausgelöst hat.
+                    onOpenNextWirZeit = {
+                        navController.switchTo(SelliDestination.CALENDAR)
+                        calendarViewModel.onWirZeitCountdownClick()
+                    },
+                    onEventClick = { event ->
+                        // Tippen führt in den Kalender-Tab und öffnet dort das Aktionen-Sheet —
+                        // dieselbe Wirkung wie ein Tap auf eine Wir-Zeit-Benachrichtigung.
+                        navController.switchTo(SelliDestination.CALENDAR)
+                        calendarViewModel.openDeepLinkedEvent(event.start.toLocalDate(), event.key())
+                    },
+                )
+            }
             composable(SelliDestination.LOCATION.route) { PlaceholderScreen(SelliDestination.LOCATION.label) }
-            composable(SETTINGS_ROUTE) { PlaceholderScreen("Profil & Einstellungen") }
+            composable(SETTINGS_ROUTE) {
+                val settingsViewModel: SettingsViewModel = viewModel(
+                    factory = SettingsViewModel.factory(dependencies.sessionRepository),
+                )
+                SettingsScreen(
+                    viewModel = settingsViewModel,
+                    calendarViewModel = calendarViewModel,
+                    onBack = { navController.popBackStack() },
+                    onSwitchAccount = onSwitchAccount,
+                )
+            }
         }
         if (!isSettings) {
             SelliBottomBar(

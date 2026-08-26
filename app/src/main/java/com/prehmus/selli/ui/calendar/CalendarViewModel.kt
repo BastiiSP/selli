@@ -67,6 +67,12 @@ data class CalendarUiState(
      * (eigener 30-Tage-Fetch, analog zum Widget). Treibt den Countdown im Kalender-Header.
      */
     val nextWirZeitEvent: CalendarEvent? = null,
+    /**
+     * Die nächsten Wir-Zeit-Termine (max. 5) aus demselben 30-Tage-Fetch wie
+     * [nextWirZeitEvent] — Datenquelle der Liste „Nächste gemeinsame Termine" auf dem
+     * Homescreen. [nextWirZeitEvent] ist immer das erste Element dieser Liste.
+     */
+    val upcomingWirZeitEvents: List<CalendarEvent> = emptyList(),
 ) {
     val selectedDayEvents: List<CalendarEvent>
         get() = eventsByDay[selectedDay].orEmpty()
@@ -228,8 +234,14 @@ class CalendarViewModel(
         viewModelScope.launch {
             val range = DateRange(start = LocalDate.now(), endInclusive = LocalDate.now().plusDays(30))
             val events = runCatching { mergeService.mergedEvents(range) }.getOrDefault(emptyList())
-            val nextEvent = NextSharedEventSelector().select(events = events, now = LocalDateTime.now())
-            _uiState.update { it.copy(nextWirZeitEvent = nextEvent) }
+            val upcoming = NextSharedEventSelector()
+                .selectUpcoming(events = events, now = LocalDateTime.now(), limit = 5)
+            _uiState.update {
+                it.copy(
+                    nextWirZeitEvent = upcoming.firstOrNull(),
+                    upcomingWirZeitEvents = upcoming,
+                )
+            }
         }
     }
 

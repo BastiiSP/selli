@@ -20,7 +20,7 @@ import androidx.compose.ui.platform.LocalContext
  *  - [calendarFraction]: Anteil des mittleren Bereichs, den Grid/Zeitstrahl bekommt
  *    (Rest geht an die Terminliste). Über das Zieh-Handle verstellbar, mit
  *    Mindestgrößen ([MIN_FRACTION]/[MAX_FRACTION]), damit kein Bereich verschwindet.
- *  - [headerCollapsed]: eingeklappter, platzsparender Header.
+ *  - [headerCollapsed]: historisch — siehe dort.
  */
 class LayoutPreferencesState(private val prefs: SharedPreferences) {
 
@@ -29,6 +29,11 @@ class LayoutPreferencesState(private val prefs: SharedPreferences) {
     )
         private set
 
+    /**
+     * Historisch: Ein-/Ausklappen des früheren Kalender-Headers. Seit dem Umzug der
+     * Countdown-Szene auf den Homescreen (26.08.2026) ohne Leser — bleibt nur erhalten,
+     * damit auf den Geräten gespeicherte Werte nicht ins Leere laufen.
+     */
     var headerCollapsed by mutableStateOf(prefs.getBoolean(KEY_HEADER_COLLAPSED, false))
         private set
 
