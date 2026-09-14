@@ -10,6 +10,7 @@ import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -97,6 +98,13 @@ fun CalendarScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
+        // Dieses Scaffold sitzt in SelliShell zwischen dem eigenen SelliTopBar und
+        // SelliBottomBar, berührt also nie die echten Bildschirmkanten. Ohne diese Zeile
+        // reserviert Scaffold trotzdem Platz für Status-/Navigationsleiste (Default:
+        // WindowInsets.safeDrawing) — zusätzlich zu dem, was SelliBottomBar über ihre eigene
+        // windowInsetsPadding bereits abzieht. Das erzeugte einen doppelt reservierten,
+        // ungenutzten schwarzen Balken unterhalb der Terminliste (Basti-Fund 14.09.2026).
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(

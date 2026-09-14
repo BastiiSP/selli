@@ -4,7 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -59,33 +59,42 @@ fun HomeScreen(
         }
     }
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item(key = "journey") {
-            JourneyHero(
-                uiState = uiState,
-                now = now,
-                onClick = onOpenNextWirZeit,
-            )
-        }
-        item(key = "heading") {
-            Text(
-                text = "Nächste gemeinsame Termine",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-        if (uiState.upcomingWirZeitEvents.isEmpty()) {
-            item(key = "empty") { NoSharedEventsHint() }
-        } else {
-            items(
-                items = uiState.upcomingWirZeitEvents,
-                key = { event -> "${event.source}:${event.id}" },
-            ) { event ->
-                SharedEventCard(event = event, onClick = { onEventClick(event) })
+    // Zweigeteilt statt einer LazyColumn: die Wanderweg-Szene bekommt den Großteil des
+    // Bildschirms (Basti-Feedback 14.09.2026 — vorher nur ein kleiner, fest hoher Ausschnitt),
+    // "Nächste gemeinsame Termine" bleibt darunter dauerhaft sichtbar und für sich scrollbar,
+    // statt mit der Szene gemeinsam aus dem Bild zu wandern.
+    Column(modifier = modifier.fillMaxSize()) {
+        JourneyHero(
+            uiState = uiState,
+            now = now,
+            onClick = onOpenNextWirZeit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1.8f)
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        )
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item(key = "heading") {
+                Text(
+                    text = "Nächste gemeinsame Termine",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            if (uiState.upcomingWirZeitEvents.isEmpty()) {
+                item(key = "empty") { NoSharedEventsHint() }
+            } else {
+                items(
+                    items = uiState.upcomingWirZeitEvents,
+                    key = { event -> "${event.source}:${event.id}" },
+                ) { event ->
+                    SharedEventCard(event = event, onClick = { onEventClick(event) })
+                }
             }
         }
     }
@@ -107,20 +116,24 @@ private fun JourneyHero(
         com.prehmus.selli.domain.countdown.calculateWirZeitCountdown(uiState.nextWirZeitEvent, now)
     }
     Surface(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
                 .background(selliGradient()),
         ) {
+            // sceneHeight wächst mit dem zugewiesenen Platz statt fest zu sein (vorher 132.dp) —
+            // die Pfad-/Wolken-Geometrie in WirZeitJourneyScene skaliert bereits über Anteile von
+            // sceneHeightPx, siehe deren interne 0.28f/0.90f-Werte.
+            val sceneHeight = (maxHeight - 32.dp).coerceAtLeast(84.dp)
             WirZeitCountdownScene(
                 countdown = countdown,
                 isSyncing = uiState.isSyncing,
                 onClick = onClick,
-                sceneHeight = 132.dp,
+                sceneHeight = sceneHeight,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             )
             RiverSpirit(
