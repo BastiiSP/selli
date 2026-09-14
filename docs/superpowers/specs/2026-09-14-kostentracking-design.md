@@ -1,8 +1,14 @@
 # Design: Kostentracking
 
 Erarbeitet mit Basti am 14.09.2026 über den `superpowers:brainstorming`-Skill.
-Erster von zwei geplanten neuen Bereichen (zweiter: Notizen/Aktivitäten, eigene
-Spec folgt separat).
+Erster von zwei geplanten neuen Bereichen (zweiter: "Ideen" – Aktivitäten/
+Rezepte, eigene Spec folgt separat).
+
+> **Nachtrag nach dem zweiten Brainstorming:** Die Tab-Reihenfolge unten
+> („vierter Tab") ist durch das zweite Feature überholt. Finale Reihenfolge:
+> `Kalender | Ideen | Wir | Kosten | Standort` — Kosten ist damit der
+> **vierte von fünf** Tabs, nicht der vierte von vieren. Inhaltlich ändert
+> das nichts an diesem Feature.
 
 ## Ziel
 
