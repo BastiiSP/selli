@@ -76,6 +76,35 @@ create policy "members update only their own row" on public.locations
 -- Kein delete: Positionen werden überschrieben, nicht gelöscht.
 
 -- ---------------------------------------------------------------------------
+-- Data-API-Rechte. Zweites, von RLS unabhängiges Tor: neu per SQL erzeugte
+-- Tabellen bekommen in aktuellen Supabase-Projekten nur REFERENCES/TRIGGER/
+-- TRUNCATE für anon/authenticated, kein DML. Ohne diese Grants antwortet
+-- PostgREST mit "permission denied for table locations" — die Karte bliebe leer,
+-- obwohl Policies und Allowlist stimmen. (Am 26.08.2026 im echten Projekt
+-- genau so eingetreten.)
+--
+-- Nur 'authenticated' (alle Policies lauten "to authenticated"), kein delete.
+-- public.selli_members bekommt bewusst keine Grants: die Allowlist liest
+-- ausschliesslich is_selli_member() als security definer.
+-- ---------------------------------------------------------------------------
+grant select, insert, update on public.locations to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- EXECUTE auf is_selli_member() eingrenzen. Postgres vergibt EXECUTE auf neue
+-- Funktionen per Default an PUBLIC — damit war die Funktion auch fuer 'anon'
+-- ueber /rest/v1/rpc/is_selli_member aufrufbar (Supabase-Linter 0028). Sie
+-- verraet nichts (ohne passendes E-Mail-Claim schlicht false, die Allowlist
+-- verlaesst die Funktion nie), aber der Endpunkt muss nicht offen stehen.
+--
+-- WICHTIG: 'authenticated' braucht EXECUTE zwingend weiter — RLS-Policy-
+-- Ausdruecke werden mit den Rechten der aufrufenden Rolle ausgewertet. Ohne das
+-- Grant scheitern alle drei Policies mit "permission denied for function
+-- is_selli_member". Am 26.08.2026 in beide Richtungen verifiziert.
+-- ---------------------------------------------------------------------------
+revoke execute on function public.is_selli_member() from public;
+grant  execute on function public.is_selli_member() to authenticated;
+
+-- ---------------------------------------------------------------------------
 -- Echtzeit für die Partnerzeile.
 -- ---------------------------------------------------------------------------
 alter table public.locations replica identity full;
