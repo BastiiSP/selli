@@ -135,12 +135,16 @@ class WidgetRefreshWorker(
         val allItems = folders.keys.flatMap { folderId -> repository.loadItems(folderId) }
         if (allItems.isEmpty()) return
 
-        val result = detectNewNoteItems(currentItems = allItems, self = self, alreadySeenIds = store.load())
+        val alreadySeenIds = store.load()
+        val result = detectNewNoteItems(currentItems = allItems, self = self, alreadySeenIds = alreadySeenIds)
         result.newItems.forEach { item ->
             val folderName = folders[item.folderId]?.name ?: "Ideen"
             notifier.notifyNewNoteItem(item, folderName, partner.displayName)
         }
-        store.save(result.updatedSeenIds)
+        // Eine fehlende ID kann von einem gerade nicht geladenen Ordner stammen und wuerde sonst
+        // fuer laengst gesehene Punkte erneut benachrichtigen. Dass geloeschte IDs so langsam im
+        // Speicher verbleiben, ist bei zwei Personen und einstelliger Ordnerzahl vernachlaessigbar.
+        store.save(alreadySeenIds + result.updatedSeenIds)
     }
 
     private fun loadPartnerInfo(): PartnerInfo? {
