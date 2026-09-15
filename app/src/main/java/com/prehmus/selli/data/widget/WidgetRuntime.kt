@@ -2,6 +2,7 @@ package com.prehmus.selli.data.widget
 
 import android.content.Context
 import com.prehmus.selli.domain.CalendarMergeService
+import com.prehmus.selli.domain.repository.ExpenseRepository
 
 /**
  * Wird von der App-Verdrahtung beim Prozessstart gesetzt.
@@ -15,4 +16,7 @@ object WidgetRuntime {
 
     @Volatile
     var onSnapshotUpdated: (suspend (Context) -> Unit)? = null
+
+    @Volatile
+    var expenseRepositoryFactory: (() -> ExpenseRepository)? = null
 }

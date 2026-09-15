@@ -3,6 +3,7 @@ package com.prehmus.selli
 import android.app.Application
 import androidx.glance.appwidget.updateAll
 import com.prehmus.selli.data.customization.FileEventCustomizationRepository
+import com.prehmus.selli.data.finance.SupabaseExpenseRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
@@ -74,6 +75,22 @@ class SelliApplication : Application() {
                         "Standort-Repository wurde vor der Sitzungsauflösung angefordert."
                     }
                 },
+                logger = AndroidCalendarLogger,
+            )
+        }
+
+        // Der Hintergrund-Worker prüft beim Kalender-Refresh nebenbei, ob die Partnerin oder
+        // der Partner eine Ausgabe eingetragen hat — dafür braucht er einen eigenen
+        // Repository-Zugang, weil zu dem Zeitpunkt keine Activity und damit kein
+        // AppDependencies-Graph existiert.
+        WidgetRuntime.expenseRepositoryFactory = {
+            SupabaseExpenseRepository(
+                client = SelliSupabaseClient(
+                    supabaseUrl = BuildConfig.SUPABASE_URL,
+                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+                    idTokenProvider = locationGoogleRepository,
+                    logger = AndroidCalendarLogger,
+                ),
                 logger = AndroidCalendarLogger,
             )
         }

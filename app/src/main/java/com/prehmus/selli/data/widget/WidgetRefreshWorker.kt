@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.prehmus.selli.data.notification.DeleteRequestNotificationStore
+import com.prehmus.selli.data.notification.ExpenseSeenStore
+import com.prehmus.selli.data.notification.PartnerActivityNotifier
 import com.prehmus.selli.data.notification.SharedEventFingerprintStore
 import com.prehmus.selli.data.notification.SharedEventNotifier
 import com.prehmus.selli.domain.model.CalendarEvent
@@ -13,6 +15,7 @@ import com.prehmus.selli.domain.model.WidgetSnapshot
 import com.prehmus.selli.domain.model.other
 import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
 import com.prehmus.selli.domain.notification.SharedEventDeletionRequestDetector
+import com.prehmus.selli.domain.notification.detectNewExpenses
 import com.prehmus.selli.domain.widget.NextPartnerEventSelector
 import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
@@ -54,6 +57,7 @@ class WidgetRefreshWorker(
             // Nach dem Snapshot und bewusst fehlertolerant: eine Panne beim Benachrichtigen darf
             // weder das frische Widget kosten noch über Result.retry() zu Doppel-Meldungen führen.
             runCatching { notifySharedEventChanges(events = events, partner = partner) }
+            runCatching { notifyNewExpenses(partner) }
 
             Result.success()
         } catch (cancelled: CancellationException) {
@@ -94,6 +98,22 @@ class WidgetRefreshWorker(
         notifier.notifyChanges(fingerprintResult.changes + deleteRequestResult.changes, partner.displayName)
         fingerprintStore.save(fingerprintResult.updatedFingerprints)
         deleteRequestStore.save(deleteRequestResult.updatedNotified)
+    }
+
+    private suspend fun notifyNewExpenses(partner: PartnerInfo) {
+        val repositoryFactory = WidgetRuntime.expenseRepositoryFactory ?: return
+        val notifier = PartnerActivityNotifier(applicationContext)
+        if (!notifier.areNotificationsEnabled()) return
+
+        val expenses = repositoryFactory().loadExpenses()
+        val store = ExpenseSeenStore(applicationContext)
+        val result = detectNewExpenses(
+            currentExpenses = expenses,
+            self = partner.person.other(),
+            alreadySeenIds = store.load(),
+        )
+        result.newExpenses.forEach { expense -> notifier.notifyNewExpense(expense, partner.displayName) }
+        store.save(result.updatedSeenIds)
     }
 
     private fun loadPartnerInfo(): PartnerInfo? {
