@@ -10,6 +10,7 @@ import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import java.time.LocalDate
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,7 @@ data class ExpensesUiState(
     val isRefreshing: Boolean = false,
     val isCreateSheetOpen: Boolean = false,
     val editingExpense: Expense? = null,
+    val userMessage: String? = null,
 )
 
 /**
@@ -36,13 +38,19 @@ class ExpensesViewModel(
     private val _uiState = MutableStateFlow(ExpensesUiState())
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
 
+    // Ein manuelles Pull-to-Refresh während ein Refresh noch läuft darf sich nicht stapeln:
+    // Jeder neue Refresh bricht den vorherigen ab, damit eine ältere, langsamere Antwort nicht
+    // die frische überschreibt (analog zu CalendarViewModel.refreshJob).
+    private var refreshJob: Job? = null
+
     init {
         refresh()
     }
 
     fun refresh() {
-        viewModelScope.launch {
-            _uiState.update { it.copy(isRefreshing = true) }
+        refreshJob?.cancel()
+        _uiState.update { it.copy(isRefreshing = true) }
+        refreshJob = viewModelScope.launch {
             val expenses = repository.loadExpenses()
             val balance = calculateBalance(expenses)
             _uiState.update {
@@ -72,9 +80,14 @@ class ExpensesViewModel(
                 paidBy = paidBy,
                 createdBy = ownPerson,
                 spentAt = spentAt,
-            )
-            _uiState.update { it.copy(isCreateSheetOpen = false) }
-            refresh()
+            ).onSuccess {
+                _uiState.update { it.copy(isCreateSheetOpen = false) }
+                refresh()
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(userMessage = error.message ?: "Ausgabe konnte nicht gespeichert werden.")
+                }
+            }
         }
     }
 
@@ -95,25 +108,43 @@ class ExpensesViewModel(
                 description = description,
                 paidBy = paidBy,
                 spentAt = spentAt,
-            )
-            _uiState.update { it.copy(editingExpense = null) }
-            refresh()
+            ).onSuccess {
+                _uiState.update { it.copy(editingExpense = null) }
+                refresh()
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(userMessage = error.message ?: "Änderung konnte nicht gespeichert werden.")
+                }
+            }
         }
     }
 
     fun deleteExpense(id: String) {
         viewModelScope.launch {
             repository.deleteExpense(id)
-            refresh()
+                .onSuccess { refresh() }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Ausgabe konnte nicht gelöscht werden.")
+                    }
+                }
         }
     }
 
     fun settle() {
         viewModelScope.launch {
             repository.settle(settledBy = ownPerson)
-            refresh()
+                .onSuccess { refresh() }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Ausgleichen ist fehlgeschlagen.")
+                    }
+                }
         }
     }
+
+    /** Snackbar im Screen hat die Meldung gezeigt — State wieder leeren (analog CalendarViewModel). */
+    fun consumeUserMessage() = _uiState.update { it.copy(userMessage = null) }
 
     companion object {
         fun factory(repository: ExpenseRepository, ownPerson: Person) =

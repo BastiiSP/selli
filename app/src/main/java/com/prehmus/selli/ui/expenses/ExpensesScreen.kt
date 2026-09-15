@@ -22,17 +22,22 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.finance.BalanceDirection
 import com.prehmus.selli.domain.model.Expense
@@ -55,11 +60,28 @@ fun ExpensesScreen(
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(uiState.userMessage) {
+        uiState.userMessage?.let { message ->
+            snackbarHostState.showSnackbar(message)
+            viewModel.consumeUserMessage()
+        }
+    }
+
+    // Kein Realtime-Sync (siehe Spec): Der Tab hängt an der NavHost-Backstack-Entry und
+    // überlebt dank saveState/restoreState einen Tab-Wechsel — ohne diesen Hook würde nach
+    // dem allerersten Besuch nie wieder automatisch nachgeladen, nur noch per Pull-to-Refresh.
+    LifecycleResumeEffect(Unit) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.background,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             FloatingActionButton(onClick = viewModel::openCreateSheet) {
                 Icon(imageVector = Icons.Default.Add, contentDescription = "Ausgabe eintragen")
