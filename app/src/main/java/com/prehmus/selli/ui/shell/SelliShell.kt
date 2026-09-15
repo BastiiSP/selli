@@ -13,10 +13,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.prehmus.selli.AppDependencies
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.key
@@ -26,13 +28,17 @@ import com.prehmus.selli.ui.calendar.CalendarViewModel
 import com.prehmus.selli.ui.expenses.ExpensesScreen
 import com.prehmus.selli.ui.expenses.ExpensesViewModel
 import com.prehmus.selli.ui.home.HomeScreen
+import com.prehmus.selli.ui.ideen.FolderDetailScreen
+import com.prehmus.selli.ui.ideen.FolderDetailViewModel
+import com.prehmus.selli.ui.ideen.IdeenScreen
+import com.prehmus.selli.ui.ideen.IdeenViewModel
 import com.prehmus.selli.ui.location.LocationScreen
 import com.prehmus.selli.ui.location.LocationViewModel
 import com.prehmus.selli.ui.settings.SettingsScreen
 import com.prehmus.selli.ui.settings.SettingsViewModel
 
 /**
- * App-Gerüst hinter dem Anmeldegate: globaler Header, vier gleichwertige Ziele in der
+ * App-Gerüst hinter dem Anmeldegate: globaler Header, fünf gleichwertige Ziele in der
  * Bottom-Navigation, Profil-/Einstellungsbereich als Vollbild darüber. Ersetzt den
  * früheren Zustand, in dem die Kalenderansicht der einzige Bildschirm war.
  *
@@ -52,7 +58,10 @@ fun SelliShell(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val currentDestination = SelliDestination.fromRoute(currentRoute) ?: SelliStartDestination
-    val isSettings = currentRoute == SETTINGS_ROUTE
+    // Sowohl Einstellungen als auch die Ordner-Detailansicht sind Vollbild-Screens ohne
+    // globale Top-/Bottom-Bar — die Ordner-Detailansicht bringt ihren eigenen Header mit
+    // Zurück-Pfeil mit (siehe FolderDetailScreen).
+    val isFullScreenRoute = currentRoute == SETTINGS_ROUTE || currentRoute == IDEEN_FOLDER_ROUTE
 
     val calendarViewModel: CalendarViewModel = viewModel(
         factory = CalendarViewModel.factory(
@@ -72,7 +81,7 @@ fun SelliShell(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        if (!isSettings) {
+        if (!isFullScreenRoute) {
             SelliTopBar(
                 ownPerson = ownPerson,
                 onOpenSettings = { navController.navigate(SETTINGS_ROUTE) },
@@ -83,7 +92,7 @@ fun SelliShell(
             startDestination = SelliStartDestination.route,
             modifier = Modifier.weight(1f),
             // Gleichwertige Ziele: sanftes Ein-/Ausblenden statt Richtungs-Slide, der eine
-            // Hierarchie behaupten würde, die es zwischen den drei Zielen nicht gibt.
+            // Hierarchie behaupten würde, die es zwischen den fünf Zielen nicht gibt.
             enterTransition = { fadeIn(tween(180)) + scaleIn(tween(180), initialScale = 0.96f) },
             exitTransition = { fadeOut(tween(180)) },
         ) {
@@ -91,6 +100,35 @@ fun SelliShell(
                 CalendarScreen(
                     viewModel = calendarViewModel,
                     suggestionRepository = dependencies.placeSuggestionRepository,
+                )
+            }
+            composable(SelliDestination.IDEEN.route) {
+                val ideenViewModel: IdeenViewModel = viewModel(
+                    factory = IdeenViewModel.factory(
+                        repository = dependencies.noteRepository,
+                        ownPerson = ownPerson,
+                    ),
+                )
+                IdeenScreen(
+                    viewModel = ideenViewModel,
+                    onOpenFolder = { folderId -> navController.navigate(ideenFolderRoute(folderId)) },
+                )
+            }
+            composable(
+                route = IDEEN_FOLDER_ROUTE,
+                arguments = listOf(navArgument("folderId") { type = NavType.StringType }),
+            ) { backStackEntry ->
+                val folderId = backStackEntry.arguments?.getString("folderId") ?: return@composable
+                val folderDetailViewModel: FolderDetailViewModel = viewModel(
+                    factory = FolderDetailViewModel.factory(
+                        repository = dependencies.noteRepository,
+                        folderId = folderId,
+                        ownPerson = ownPerson,
+                    ),
+                )
+                FolderDetailScreen(
+                    viewModel = folderDetailViewModel,
+                    onBack = { navController.popBackStack() },
                 )
             }
             composable(SelliDestination.HOME.route) {
@@ -141,7 +179,7 @@ fun SelliShell(
                 )
             }
         }
-        if (!isSettings) {
+        if (!isFullScreenRoute) {
             SelliBottomBar(
                 current = currentDestination,
                 ownPerson = ownPerson,

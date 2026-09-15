@@ -9,7 +9,7 @@ class SelliDestinationTest {
     @Test
     fun `routes are unique and stable`() {
         val routes = SelliDestination.entries.map { it.route }
-        assertEquals(listOf("calendar", "home", "expenses", "location"), routes)
+        assertEquals(listOf("calendar", "ideen", "home", "expenses", "location"), routes)
         assertEquals(routes.size, routes.toSet().size)
     }
 
@@ -29,7 +29,7 @@ class SelliDestinationTest {
 
     @Test
     fun `bottom navigation order puts the shared home in the middle`() {
-        assertEquals(SelliDestination.HOME, SelliDestination.entries[1])
+        assertEquals(SelliDestination.HOME, SelliDestination.entries[2])
         assertEquals(SelliDestination.HOME, SelliStartDestination)
     }
 }
