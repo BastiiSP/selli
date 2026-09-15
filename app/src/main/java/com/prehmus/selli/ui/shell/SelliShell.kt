@@ -23,6 +23,8 @@ import com.prehmus.selli.domain.model.key
 import com.prehmus.selli.ui.SelliDeepLink
 import com.prehmus.selli.ui.calendar.CalendarScreen
 import com.prehmus.selli.ui.calendar.CalendarViewModel
+import com.prehmus.selli.ui.expenses.ExpensesScreen
+import com.prehmus.selli.ui.expenses.ExpensesViewModel
 import com.prehmus.selli.ui.home.HomeScreen
 import com.prehmus.selli.ui.location.LocationScreen
 import com.prehmus.selli.ui.location.LocationViewModel
@@ -30,7 +32,7 @@ import com.prehmus.selli.ui.settings.SettingsScreen
 import com.prehmus.selli.ui.settings.SettingsViewModel
 
 /**
- * App-Gerüst hinter dem Anmeldegate: globaler Header, drei gleichwertige Ziele in der
+ * App-Gerüst hinter dem Anmeldegate: globaler Header, vier gleichwertige Ziele in der
  * Bottom-Navigation, Profil-/Einstellungsbereich als Vollbild darüber. Ersetzt den
  * früheren Zustand, in dem die Kalenderansicht der einzige Bildschirm war.
  *
@@ -108,6 +110,15 @@ fun SelliShell(
                         calendarViewModel.openDeepLinkedEvent(event.start.toLocalDate(), event.key())
                     },
                 )
+            }
+            composable(SelliDestination.EXPENSES.route) {
+                val expensesViewModel: ExpensesViewModel = viewModel(
+                    factory = ExpensesViewModel.factory(
+                        repository = dependencies.expenseRepository,
+                        ownPerson = ownPerson,
+                    ),
+                )
+                ExpensesScreen(viewModel = expensesViewModel)
             }
             composable(SelliDestination.LOCATION.route) {
                 val locationViewModel: LocationViewModel = viewModel(

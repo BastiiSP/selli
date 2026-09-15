@@ -9,7 +9,7 @@ class SelliDestinationTest {
     @Test
     fun `routes are unique and stable`() {
         val routes = SelliDestination.entries.map { it.route }
-        assertEquals(listOf("calendar", "home", "location"), routes)
+        assertEquals(listOf("calendar", "home", "expenses", "location"), routes)
         assertEquals(routes.size, routes.toSet().size)
     }
 

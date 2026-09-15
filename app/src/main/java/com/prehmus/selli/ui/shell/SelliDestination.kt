@@ -1,13 +1,14 @@
 package com.prehmus.selli.ui.shell
 
 /**
- * Die drei gleichwertigen Ziele der Bottom-Navigation. Die Reihenfolge der Einträge ist
+ * Die vier gleichwertigen Ziele der Bottom-Navigation. Die Reihenfolge der Einträge ist
  * zugleich die Reihenfolge in der Leiste — „Wir" sitzt bewusst in der Mitte, weil es das
  * zentrale „auf einen Blick"-Ziel ist.
  */
 enum class SelliDestination(val route: String, val label: String) {
     CALENDAR(route = "calendar", label = "Kalender"),
     HOME(route = "home", label = "Wir"),
+    EXPENSES(route = "expenses", label = "Kosten"),
     LOCATION(route = "location", label = "Standort"),
     ;
 
