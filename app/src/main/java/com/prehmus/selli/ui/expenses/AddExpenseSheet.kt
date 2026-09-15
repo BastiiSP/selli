@@ -36,12 +36,15 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddExpenseSheet(
+    ownPerson: Person,
     onSave: (amount: Double, description: String, paidBy: Person, spentAt: LocalDate) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var amountText by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var paidBy by remember { mutableStateOf(Person.BASTI) }
+    // Vorbelegung ist die eigene Person (Spec) — sonst wäre auf Mellis Gerät jede Ausgabe
+    // ohne manuelles Umschalten fälschlich als "Basti bezahlt" erfasst.
+    var paidBy by remember { mutableStateOf(ownPerson) }
     var spentAt by remember { mutableStateOf(LocalDate.now()) }
     var showDatePicker by remember { mutableStateOf(false) }
 

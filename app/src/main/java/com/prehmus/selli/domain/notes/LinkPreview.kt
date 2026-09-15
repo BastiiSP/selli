@@ -20,6 +20,9 @@ fun interface LinkPreviewFetcher {
 fun parseLinkPreview(document: Document): LinkPreview {
     val ogTitle = document.select("meta[property=og:title]").attr("content").takeUnless(String::isBlank)
     val title = ogTitle ?: document.title().takeUnless(String::isBlank)
-    val imageUrl = document.select("meta[property=og:image]").attr("content").takeUnless(String::isBlank)
+    val ogImage = document.select("meta[property=og:image]")
+    val imageUrl = ogImage.attr("abs:content")
+        .ifBlank { ogImage.attr("content") }
+        .takeUnless(String::isBlank)
     return LinkPreview(title = title, imageUrl = imageUrl)
 }

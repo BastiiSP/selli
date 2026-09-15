@@ -20,6 +20,7 @@ data class IdeenUiState(
     val isCreateFolderSheetOpen: Boolean = false,
     val renamingFolder: NoteFolder? = null,
     val deletingFolder: NoteFolder? = null,
+    val userMessage: String? = null,
 )
 
 /**
@@ -63,8 +64,15 @@ class IdeenViewModel(
     fun createFolder(name: String) {
         viewModelScope.launch {
             repository.addFolder(name = name, createdBy = ownPerson)
-            _uiState.update { it.copy(isCreateFolderSheetOpen = false) }
-            refresh()
+                .onSuccess {
+                    _uiState.update { it.copy(isCreateFolderSheetOpen = false) }
+                    refresh()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Ordner konnte nicht angelegt werden.")
+                    }
+                }
         }
     }
 
@@ -75,8 +83,15 @@ class IdeenViewModel(
         val folder = _uiState.value.renamingFolder ?: return
         viewModelScope.launch {
             repository.renameFolder(id = folder.id, name = name)
-            _uiState.update { it.copy(renamingFolder = null) }
-            refresh()
+                .onSuccess {
+                    _uiState.update { it.copy(renamingFolder = null) }
+                    refresh()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Ordner konnte nicht umbenannt werden.")
+                    }
+                }
         }
     }
 
@@ -87,10 +102,20 @@ class IdeenViewModel(
         val folder = _uiState.value.deletingFolder ?: return
         viewModelScope.launch {
             repository.deleteFolder(folder.id)
-            _uiState.update { it.copy(deletingFolder = null) }
-            refresh()
+                .onSuccess {
+                    _uiState.update { it.copy(deletingFolder = null) }
+                    refresh()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(userMessage = error.message ?: "Ordner konnte nicht gelöscht werden.")
+                    }
+                }
         }
     }
+
+    /** Snackbar im Screen hat die Meldung gezeigt — State wieder leeren (analog ExpensesViewModel). */
+    fun consumeUserMessage() = _uiState.update { it.copy(userMessage = null) }
 
     companion object {
         fun factory(repository: NoteRepository, ownPerson: Person) =

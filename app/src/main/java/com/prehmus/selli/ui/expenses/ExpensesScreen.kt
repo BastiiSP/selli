@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.finance.BalanceDirection
 import com.prehmus.selli.domain.model.Expense
+import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.components.PersonPill
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -107,6 +108,7 @@ fun ExpensesScreen(
                         BalanceCard(
                             balance = uiState.balance,
                             direction = uiState.balanceDirection,
+                            ownPerson = uiState.ownPerson,
                             onSettle = viewModel::settle,
                         )
                     }
@@ -123,6 +125,7 @@ fun ExpensesScreen(
 
     if (uiState.isCreateSheetOpen) {
         AddExpenseSheet(
+            ownPerson = uiState.ownPerson,
             onSave = viewModel::addExpense,
             onDismiss = viewModel::dismissCreateSheet,
         )
@@ -142,12 +145,23 @@ fun ExpensesScreen(
 private fun BalanceCard(
     balance: Double,
     direction: BalanceDirection,
+    ownPerson: Person,
     onSettle: () -> Unit,
 ) {
     val amountText = "%.2f".format(kotlin.math.abs(balance)).replace('.', ',')
+    // Vier statt zwei Textvarianten: "schuldet"/"wird geschuldet" hängt zusätzlich davon ab,
+    // wer gerade angemeldet ist (die App läuft symmetrisch auf beiden Geräten).
     val label = when (direction) {
-        BalanceDirection.MELLI_OWES_BASTI -> "Melli schuldet dir $amountText €"
-        BalanceDirection.BASTI_OWES_MELLI -> "Du schuldest Melli $amountText €"
+        BalanceDirection.MELLI_OWES_BASTI -> if (ownPerson == Person.BASTI) {
+            "Melli schuldet dir $amountText €"
+        } else {
+            "Du schuldest Basti $amountText €"
+        }
+        BalanceDirection.BASTI_OWES_MELLI -> if (ownPerson == Person.MELLI) {
+            "Basti schuldet dir $amountText €"
+        } else {
+            "Du schuldest Melli $amountText €"
+        }
         BalanceDirection.SETTLED -> "Ausgeglichen 🎉"
     }
     Surface(

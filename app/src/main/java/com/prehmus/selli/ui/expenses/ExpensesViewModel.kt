@@ -25,6 +25,9 @@ data class ExpensesUiState(
     val isCreateSheetOpen: Boolean = false,
     val editingExpense: Expense? = null,
     val userMessage: String? = null,
+    // Wer gerade angemeldet ist — die Saldo-Karte braucht das, um "Du"/"dir" korrekt
+    // aus Sicht des jeweiligen Geräts zu formulieren (siehe BalanceCard).
+    val ownPerson: Person = Person.BASTI,
 )
 
 /**
@@ -35,7 +38,7 @@ class ExpensesViewModel(
     private val repository: ExpenseRepository,
     private val ownPerson: Person,
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(ExpensesUiState())
+    private val _uiState = MutableStateFlow(ExpensesUiState(ownPerson = ownPerson))
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
 
     // Ein manuelles Pull-to-Refresh während ein Refresh noch läuft darf sich nicht stapeln:

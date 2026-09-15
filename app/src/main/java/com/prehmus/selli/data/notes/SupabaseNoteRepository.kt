@@ -97,14 +97,15 @@ class SupabaseNoteRepository(
     ): Result<NoteItem> = runCatching {
         client.ensureSignedIn().getOrThrow()
         val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
+        val normalizedUrl = normalizeUrl(url)
         // Vorschau vor dem Schreiben laden — schlägt sie fehl/läuft in den Timeout, liefert
         // der Fetcher laut Vertrag `null`, der Punkt wird trotzdem ohne Vorschau gespeichert.
-        val preview: LinkPreview? = url?.takeUnless(String::isBlank)?.let { linkPreviewFetcher.fetch(it) }
+        val preview: LinkPreview? = normalizedUrl?.let { linkPreviewFetcher.fetch(it) }
         val item = NoteItem(
             id = UUID.randomUUID().toString(),
             folderId = folderId,
             text = text,
-            url = url,
+            url = normalizedUrl,
             previewTitle = preview?.title,
             previewImageUrl = preview?.imageUrl,
             isChecked = false,
@@ -119,10 +120,11 @@ class SupabaseNoteRepository(
     override suspend fun updateItem(id: String, text: String, url: String?): Result<Unit> = runCatching {
         client.ensureSignedIn().getOrThrow()
         val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
+        val normalizedUrl = normalizeUrl(url)
         supabase.from(ITEMS_TABLE).update(
             {
                 set("text", text)
-                set("url", url)
+                set("url", normalizedUrl)
             },
         ) {
             filter { eq("id", id) }
@@ -154,6 +156,18 @@ class SupabaseNoteRepository(
 
     private fun logError(source: String, error: Throwable) {
         runCatching { logger.error(source, error) }
+    }
+
+    private fun normalizeUrl(url: String?): String? {
+        val nonBlankUrl = url?.takeUnless(String::isBlank) ?: return null
+        return if (
+            nonBlankUrl.startsWith("http://", ignoreCase = true) ||
+            nonBlankUrl.startsWith("https://", ignoreCase = true)
+        ) {
+            nonBlankUrl
+        } else {
+            "https://$nonBlankUrl"
+        }
     }
 
     private companion object {

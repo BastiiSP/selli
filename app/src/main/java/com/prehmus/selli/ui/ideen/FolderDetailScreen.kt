@@ -36,6 +36,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -112,43 +113,51 @@ fun FolderDetailScreen(
             }
         },
     ) { innerPadding ->
-        if (uiState.openItems.isEmpty() && uiState.archivedItems.isEmpty() && !uiState.isRefreshing) {
-            IdeenEmptyHint(
-                message = "Noch keine Punkte",
-                modifier = Modifier.padding(innerPadding).fillMaxSize(),
-            )
-        } else {
-            LazyColumn(
-                modifier = Modifier.padding(innerPadding).fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                items(items = uiState.openItems, key = { it.id }) { item ->
-                    NoteItemCard(
-                        item = item,
-                        onCheckedChange = { checked -> viewModel.setChecked(item, checked) },
-                        onClick = { viewModel.beginEditing(item) },
-                    )
-                }
-                if (uiState.archivedItems.isNotEmpty()) {
-                    item(key = "archive-toggle") {
-                        TextButton(onClick = viewModel::toggleArchiveExpanded) {
-                            Text(
-                                if (uiState.isArchiveExpanded) {
-                                    "Erledigt (${uiState.archivedItems.size}) ausblenden"
-                                } else {
-                                    "Erledigt (${uiState.archivedItems.size})"
-                                },
-                            )
-                        }
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = viewModel::refresh,
+            modifier = Modifier
+                .padding(innerPadding)
+                .fillMaxSize(),
+        ) {
+            if (uiState.openItems.isEmpty() && uiState.archivedItems.isEmpty() && !uiState.isRefreshing) {
+                IdeenEmptyHint(
+                    message = "Noch keine Punkte",
+                    modifier = Modifier.fillMaxSize(),
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(items = uiState.openItems, key = { it.id }) { item ->
+                        NoteItemCard(
+                            item = item,
+                            onCheckedChange = { checked -> viewModel.setChecked(item, checked) },
+                            onClick = { viewModel.beginEditing(item) },
+                        )
                     }
-                    if (uiState.isArchiveExpanded) {
-                        items(items = uiState.archivedItems, key = { "archived-${it.id}" }) { item ->
-                            NoteItemCard(
-                                item = item,
-                                onCheckedChange = { checked -> viewModel.setChecked(item, checked) },
-                                onClick = { viewModel.beginEditing(item) },
-                            )
+                    if (uiState.archivedItems.isNotEmpty()) {
+                        item(key = "archive-toggle") {
+                            TextButton(onClick = viewModel::toggleArchiveExpanded) {
+                                Text(
+                                    if (uiState.isArchiveExpanded) {
+                                        "Erledigt (${uiState.archivedItems.size}) ausblenden"
+                                    } else {
+                                        "Erledigt (${uiState.archivedItems.size})"
+                                    },
+                                )
+                            }
+                        }
+                        if (uiState.isArchiveExpanded) {
+                            items(items = uiState.archivedItems, key = { "archived-${it.id}" }) { item ->
+                                NoteItemCard(
+                                    item = item,
+                                    onCheckedChange = { checked -> viewModel.setChecked(item, checked) },
+                                    onClick = { viewModel.beginEditing(item) },
+                                )
+                            }
                         }
                     }
                 }

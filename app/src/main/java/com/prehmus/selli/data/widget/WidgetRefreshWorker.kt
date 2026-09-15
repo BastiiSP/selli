@@ -109,6 +109,8 @@ class WidgetRefreshWorker(
         if (!notifier.areNotificationsEnabled()) return
 
         val expenses = repositoryFactory().loadExpenses()
+        if (expenses.isEmpty()) return
+
         val store = ExpenseSeenStore(applicationContext)
         val result = detectNewExpenses(
             currentExpenses = expenses,
@@ -128,7 +130,10 @@ class WidgetRefreshWorker(
         val store = NoteItemSeenStore(applicationContext)
         val repository = repositoryFactory()
         val folders = repository.loadFolders().associateBy { it.id }
+        if (folders.isEmpty()) return
+
         val allItems = folders.keys.flatMap { folderId -> repository.loadItems(folderId) }
+        if (allItems.isEmpty()) return
 
         val result = detectNewNoteItems(currentItems = allItems, self = self, alreadySeenIds = store.load())
         result.newItems.forEach { item ->
