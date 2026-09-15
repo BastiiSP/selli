@@ -3,6 +3,7 @@ package com.prehmus.selli.data.widget
 import android.content.Context
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.repository.ExpenseRepository
+import com.prehmus.selli.domain.repository.NoteRepository
 
 /**
  * Wird von der App-Verdrahtung beim Prozessstart gesetzt.
@@ -19,4 +20,7 @@ object WidgetRuntime {
 
     @Volatile
     var expenseRepositoryFactory: (() -> ExpenseRepository)? = null
+
+    @Volatile
+    var noteRepositoryFactory: (() -> NoteRepository)? = null
 }

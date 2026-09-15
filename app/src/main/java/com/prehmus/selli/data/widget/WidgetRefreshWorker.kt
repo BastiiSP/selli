@@ -5,6 +5,7 @@ import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.prehmus.selli.data.notification.DeleteRequestNotificationStore
 import com.prehmus.selli.data.notification.ExpenseSeenStore
+import com.prehmus.selli.data.notification.NoteItemSeenStore
 import com.prehmus.selli.data.notification.PartnerActivityNotifier
 import com.prehmus.selli.data.notification.SharedEventFingerprintStore
 import com.prehmus.selli.data.notification.SharedEventNotifier
@@ -16,6 +17,7 @@ import com.prehmus.selli.domain.model.other
 import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
 import com.prehmus.selli.domain.notification.SharedEventDeletionRequestDetector
 import com.prehmus.selli.domain.notification.detectNewExpenses
+import com.prehmus.selli.domain.notification.detectNewNoteItems
 import com.prehmus.selli.domain.widget.NextPartnerEventSelector
 import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
@@ -58,6 +60,7 @@ class WidgetRefreshWorker(
             // weder das frische Widget kosten noch über Result.retry() zu Doppel-Meldungen führen.
             runCatching { notifySharedEventChanges(events = events, partner = partner) }
             runCatching { notifyNewExpenses(partner) }
+            runCatching { notifyNewNoteItems(partner) }
 
             Result.success()
         } catch (cancelled: CancellationException) {
@@ -113,6 +116,25 @@ class WidgetRefreshWorker(
             alreadySeenIds = store.load(),
         )
         result.newExpenses.forEach { expense -> notifier.notifyNewExpense(expense, partner.displayName) }
+        store.save(result.updatedSeenIds)
+    }
+
+    private suspend fun notifyNewNoteItems(partner: PartnerInfo) {
+        val repositoryFactory = WidgetRuntime.noteRepositoryFactory ?: return
+        val notifier = PartnerActivityNotifier(applicationContext)
+        if (!notifier.areNotificationsEnabled()) return
+
+        val self = partner.person.other()
+        val store = NoteItemSeenStore(applicationContext)
+        val repository = repositoryFactory()
+        val folders = repository.loadFolders().associateBy { it.id }
+        val allItems = folders.keys.flatMap { folderId -> repository.loadItems(folderId) }
+
+        val result = detectNewNoteItems(currentItems = allItems, self = self, alreadySeenIds = store.load())
+        result.newItems.forEach { item ->
+            val folderName = folders[item.folderId]?.name ?: "Ideen"
+            notifier.notifyNewNoteItem(item, folderName, partner.displayName)
+        }
         store.save(result.updatedSeenIds)
     }
 

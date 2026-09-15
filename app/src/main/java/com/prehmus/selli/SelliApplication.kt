@@ -10,6 +10,8 @@ import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.location.LocationRuntime
 import com.prehmus.selli.data.location.SupabaseLocationRepository
+import com.prehmus.selli.data.notes.JsoupLinkPreviewFetcher
+import com.prehmus.selli.data.notes.SupabaseNoteRepository
 import com.prehmus.selli.data.supabase.SelliSupabaseClient
 import com.prehmus.selli.data.widget.WidgetRefreshScheduler
 import com.prehmus.selli.data.widget.WidgetRuntime
@@ -91,6 +93,21 @@ class SelliApplication : Application() {
                     idTokenProvider = locationGoogleRepository,
                     logger = AndroidCalendarLogger,
                 ),
+                logger = AndroidCalendarLogger,
+            )
+        }
+
+        // Dasselbe für die Ideen: neue Punkte der Partnerin bzw. des Partners fallen beim
+        // Hintergrund-Lauf mit auf, ohne dass die App offen sein muss.
+        WidgetRuntime.noteRepositoryFactory = {
+            SupabaseNoteRepository(
+                client = SelliSupabaseClient(
+                    supabaseUrl = BuildConfig.SUPABASE_URL,
+                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+                    idTokenProvider = locationGoogleRepository,
+                    logger = AndroidCalendarLogger,
+                ),
+                linkPreviewFetcher = JsoupLinkPreviewFetcher(logger = AndroidCalendarLogger),
                 logger = AndroidCalendarLogger,
             )
         }
