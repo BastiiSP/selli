@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import com.prehmus.selli.data.notification.DeleteRequestNotificationStore
+import com.prehmus.selli.data.notification.ExpenseSeenStore
+import com.prehmus.selli.data.notification.NoteItemSeenStore
+import com.prehmus.selli.data.notification.PartnerActivityNotifier
 import com.prehmus.selli.data.notification.SharedEventFingerprintStore
 import com.prehmus.selli.data.notification.SharedEventNotifier
 import com.prehmus.selli.domain.model.CalendarEvent
@@ -13,6 +16,8 @@ import com.prehmus.selli.domain.model.WidgetSnapshot
 import com.prehmus.selli.domain.model.other
 import com.prehmus.selli.domain.notification.PartnerSharedEventChangeDetector
 import com.prehmus.selli.domain.notification.SharedEventDeletionRequestDetector
+import com.prehmus.selli.domain.notification.detectNewExpenses
+import com.prehmus.selli.domain.notification.detectNewNoteItems
 import com.prehmus.selli.domain.widget.NextPartnerEventSelector
 import com.prehmus.selli.domain.widget.NextSharedEventSelector
 import java.time.LocalDate
@@ -54,6 +59,8 @@ class WidgetRefreshWorker(
             // Nach dem Snapshot und bewusst fehlertolerant: eine Panne beim Benachrichtigen darf
             // weder das frische Widget kosten noch über Result.retry() zu Doppel-Meldungen führen.
             runCatching { notifySharedEventChanges(events = events, partner = partner) }
+            runCatching { notifyNewExpenses(partner) }
+            runCatching { notifyNewNoteItems(partner) }
 
             Result.success()
         } catch (cancelled: CancellationException) {
@@ -94,6 +101,50 @@ class WidgetRefreshWorker(
         notifier.notifyChanges(fingerprintResult.changes + deleteRequestResult.changes, partner.displayName)
         fingerprintStore.save(fingerprintResult.updatedFingerprints)
         deleteRequestStore.save(deleteRequestResult.updatedNotified)
+    }
+
+    private suspend fun notifyNewExpenses(partner: PartnerInfo) {
+        val repositoryFactory = WidgetRuntime.expenseRepositoryFactory ?: return
+        val notifier = PartnerActivityNotifier(applicationContext)
+        if (!notifier.areNotificationsEnabled()) return
+
+        val expenses = repositoryFactory().loadExpenses()
+        if (expenses.isEmpty()) return
+
+        val store = ExpenseSeenStore(applicationContext)
+        val result = detectNewExpenses(
+            currentExpenses = expenses,
+            self = partner.person.other(),
+            alreadySeenIds = store.load(),
+        )
+        result.newExpenses.forEach { expense -> notifier.notifyNewExpense(expense, partner.displayName) }
+        store.save(result.updatedSeenIds)
+    }
+
+    private suspend fun notifyNewNoteItems(partner: PartnerInfo) {
+        val repositoryFactory = WidgetRuntime.noteRepositoryFactory ?: return
+        val notifier = PartnerActivityNotifier(applicationContext)
+        if (!notifier.areNotificationsEnabled()) return
+
+        val self = partner.person.other()
+        val store = NoteItemSeenStore(applicationContext)
+        val repository = repositoryFactory()
+        val folders = repository.loadFolders().associateBy { it.id }
+        if (folders.isEmpty()) return
+
+        val allItems = folders.keys.flatMap { folderId -> repository.loadItems(folderId) }
+        if (allItems.isEmpty()) return
+
+        val alreadySeenIds = store.load()
+        val result = detectNewNoteItems(currentItems = allItems, self = self, alreadySeenIds = alreadySeenIds)
+        result.newItems.forEach { item ->
+            val folderName = folders[item.folderId]?.name ?: "Ideen"
+            notifier.notifyNewNoteItem(item, folderName, partner.displayName)
+        }
+        // Eine fehlende ID kann von einem gerade nicht geladenen Ordner stammen und wuerde sonst
+        // fuer laengst gesehene Punkte erneut benachrichtigen. Dass geloeschte IDs so langsam im
+        // Speicher verbleiben, ist bei zwei Personen und einstelliger Ordnerzahl vernachlaessigbar.
+        store.save(alreadySeenIds + result.updatedSeenIds)
     }
 
     private fun loadPartnerInfo(): PartnerInfo? {

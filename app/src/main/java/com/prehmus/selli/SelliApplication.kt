@@ -3,12 +3,15 @@ package com.prehmus.selli
 import android.app.Application
 import androidx.glance.appwidget.updateAll
 import com.prehmus.selli.data.customization.FileEventCustomizationRepository
+import com.prehmus.selli.data.finance.SupabaseExpenseRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.location.LocationRuntime
 import com.prehmus.selli.data.location.SupabaseLocationRepository
+import com.prehmus.selli.data.notes.JsoupLinkPreviewFetcher
+import com.prehmus.selli.data.notes.SupabaseNoteRepository
 import com.prehmus.selli.data.supabase.SelliSupabaseClient
 import com.prehmus.selli.data.widget.WidgetRefreshScheduler
 import com.prehmus.selli.data.widget.WidgetRuntime
@@ -74,6 +77,37 @@ class SelliApplication : Application() {
                         "Standort-Repository wurde vor der Sitzungsauflösung angefordert."
                     }
                 },
+                logger = AndroidCalendarLogger,
+            )
+        }
+
+        // Der Hintergrund-Worker prüft beim Kalender-Refresh nebenbei, ob die Partnerin oder
+        // der Partner eine Ausgabe eingetragen hat — dafür braucht er einen eigenen
+        // Repository-Zugang, weil zu dem Zeitpunkt keine Activity und damit kein
+        // AppDependencies-Graph existiert.
+        WidgetRuntime.expenseRepositoryFactory = {
+            SupabaseExpenseRepository(
+                client = SelliSupabaseClient(
+                    supabaseUrl = BuildConfig.SUPABASE_URL,
+                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+                    idTokenProvider = locationGoogleRepository,
+                    logger = AndroidCalendarLogger,
+                ),
+                logger = AndroidCalendarLogger,
+            )
+        }
+
+        // Dasselbe für die Ideen: neue Punkte der Partnerin bzw. des Partners fallen beim
+        // Hintergrund-Lauf mit auf, ohne dass die App offen sein muss.
+        WidgetRuntime.noteRepositoryFactory = {
+            SupabaseNoteRepository(
+                client = SelliSupabaseClient(
+                    supabaseUrl = BuildConfig.SUPABASE_URL,
+                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+                    idTokenProvider = locationGoogleRepository,
+                    logger = AndroidCalendarLogger,
+                ),
+                linkPreviewFetcher = JsoupLinkPreviewFetcher(logger = AndroidCalendarLogger),
                 logger = AndroidCalendarLogger,
             )
         }

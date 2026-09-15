@@ -2,9 +2,12 @@ package com.prehmus.selli
 
 import androidx.activity.ComponentActivity
 import com.prehmus.selli.data.customization.FileEventCustomizationRepository
+import com.prehmus.selli.data.finance.SupabaseExpenseRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
+import com.prehmus.selli.data.notes.JsoupLinkPreviewFetcher
+import com.prehmus.selli.data.notes.SupabaseNoteRepository
 import com.prehmus.selli.data.location.SupabaseLocationRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.places.PlacesAutocompleteRepository
@@ -15,9 +18,11 @@ import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
+import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.util.concurrent.atomic.AtomicReference
@@ -110,4 +115,19 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
     // Ohne Supabase-Zugangsdaten bleibt der Standort-Tab bei einem Hinweis, statt eine leere
     // Karte zu zeigen — gleiches Prinzip wie beim fehlenden Places-Schluessel.
     override val isLocationSharingConfigured: Boolean = supabaseClient.isConfigured
+
+    // Wiederverwendet denselben Supabase-Client wie das Standort-Feature — eine Anmeldung
+    // (per Google-ID-Token) genügt für alle drei Bereiche (Standort, Kosten, Ideen).
+    override val expenseRepository: ExpenseRepository = SupabaseExpenseRepository(
+        client = supabaseClient,
+        logger = AndroidCalendarLogger,
+    )
+
+    // Die Link-Vorschau haengt am Repository, nicht an der UI: der Punkt wird auch dann
+    // gespeichert, wenn die Zielseite nicht erreichbar ist (Fetcher schluckt alle Fehler).
+    override val noteRepository: NoteRepository = SupabaseNoteRepository(
+        client = supabaseClient,
+        linkPreviewFetcher = JsoupLinkPreviewFetcher(logger = AndroidCalendarLogger),
+        logger = AndroidCalendarLogger,
+    )
 }

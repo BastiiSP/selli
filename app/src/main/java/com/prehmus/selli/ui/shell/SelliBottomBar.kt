@@ -1,9 +1,11 @@
 package com.prehmus.selli.ui.shell
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -18,7 +20,7 @@ import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.ui.theme.personColor
 
 /**
- * Schmale Bottom-Navigation mit den drei gleichwertigen Zielen. Der Indikator trägt die
+ * Schmale Bottom-Navigation mit den fünf gleichwertigen Zielen. Der Indikator trägt die
  * Personenfarbe der angemeldeten Person — kleine Personalisierung, ohne ein neues
  * Farbsystem zu erfinden.
  */
@@ -65,6 +67,8 @@ fun SelliBottomBar(
 // nicht ein, "CalendarMonth" & Co. wären hier nicht auflösbar.
 private fun SelliDestination.icon(): ImageVector = when (this) {
     SelliDestination.CALENDAR -> Icons.Default.DateRange
+    SelliDestination.IDEEN -> Icons.AutoMirrored.Filled.List
     SelliDestination.HOME -> Icons.Default.Favorite
+    SelliDestination.EXPENSES -> Icons.Default.ShoppingCart
     SelliDestination.LOCATION -> Icons.Default.Place
 }
