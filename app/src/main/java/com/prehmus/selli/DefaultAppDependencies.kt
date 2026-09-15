@@ -2,6 +2,7 @@ package com.prehmus.selli
 
 import androidx.activity.ComponentActivity
 import com.prehmus.selli.data.customization.FileEventCustomizationRepository
+import com.prehmus.selli.data.finance.SupabaseExpenseRepository
 import com.prehmus.selli.data.google.GoogleCalendarDataRepository
 import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
@@ -15,6 +16,7 @@ import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
+import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
@@ -110,4 +112,11 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
     // Ohne Supabase-Zugangsdaten bleibt der Standort-Tab bei einem Hinweis, statt eine leere
     // Karte zu zeigen — gleiches Prinzip wie beim fehlenden Places-Schluessel.
     override val isLocationSharingConfigured: Boolean = supabaseClient.isConfigured
+
+    // Wiederverwendet denselben Supabase-Client wie das Standort-Feature — eine Anmeldung
+    // (per Google-ID-Token) genügt für alle drei Bereiche (Standort, Kosten, Ideen).
+    override val expenseRepository: ExpenseRepository = SupabaseExpenseRepository(
+        client = supabaseClient,
+        logger = AndroidCalendarLogger,
+    )
 }

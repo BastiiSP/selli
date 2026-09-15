@@ -9,6 +9,7 @@ import com.prehmus.selli.domain.model.CalendarSource
 import com.prehmus.selli.domain.model.CustomizationTarget
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.EventCustomization
+import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
 import com.prehmus.selli.domain.model.Person
@@ -17,6 +18,7 @@ import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.places.LocationSuggestion
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
+import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
@@ -232,6 +234,66 @@ class PreviewDependencies : AppDependencies {
     }
 
     override val isLocationSharingConfigured: Boolean = true
+
+    // In-Memory-Fake fürs Kostentracking, damit die Preview ohne Supabase auskommt.
+    override val expenseRepository: ExpenseRepository = object : ExpenseRepository {
+        private val stored = mutableListOf<Expense>()
+
+        override suspend fun loadExpenses(): List<Expense> = stored.sortedByDescending { it.createdAt }
+
+        override suspend fun addExpense(
+            amount: Double,
+            description: String,
+            paidBy: Person,
+            createdBy: Person,
+            spentAt: LocalDate,
+        ): Result<Expense> {
+            val expense = Expense(
+                id = "expense-${idCounter.incrementAndGet()}",
+                amount = amount,
+                description = description,
+                paidBy = paidBy,
+                createdBy = createdBy,
+                spentAt = spentAt,
+                createdAt = Instant.now(),
+                settlementId = null,
+            )
+            stored += expense
+            return Result.success(expense)
+        }
+
+        override suspend fun updateExpense(
+            id: String,
+            amount: Double,
+            description: String,
+            paidBy: Person,
+            spentAt: LocalDate,
+        ): Result<Unit> {
+            val index = stored.indexOfFirst { it.id == id }
+            if (index >= 0) {
+                stored[index] = stored[index].copy(
+                    amount = amount,
+                    description = description,
+                    paidBy = paidBy,
+                    spentAt = spentAt,
+                )
+            }
+            return Result.success(Unit)
+        }
+
+        override suspend fun deleteExpense(id: String): Result<Unit> {
+            stored.removeAll { it.id == id }
+            return Result.success(Unit)
+        }
+
+        override suspend fun settle(settledBy: Person): Result<Unit> {
+            val settlementId = "settlement-${idCounter.incrementAndGet()}"
+            stored.replaceAll { expense ->
+                if (expense.settlementId == null) expense.copy(settlementId = settlementId) else expense
+            }
+            return Result.success(Unit)
+        }
+    }
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {
         override suspend fun createEvent(event: NewCalendarEvent): Result<CalendarEvent> {

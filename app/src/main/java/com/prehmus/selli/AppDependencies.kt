@@ -3,6 +3,7 @@ package com.prehmus.selli
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
+import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
@@ -27,6 +28,9 @@ interface AppDependencies {
 
     /** Positionen beider Personen (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
     val locationRepository: LocationRepository
+
+    /** Gemeinsame Ausgaben (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
+    val expenseRepository: ExpenseRepository
 
     /**
      * false, wenn in `local.properties` keine Supabase-Zugangsdaten liegen — dann zeigt der
