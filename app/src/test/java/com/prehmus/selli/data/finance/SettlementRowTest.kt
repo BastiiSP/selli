@@ -33,4 +33,16 @@ class SettlementRowTest {
 
         assertNull(row.toDomain())
     }
+
+    @Test
+    fun `invalid timestamp yields null instead of throwing`() {
+        val row = SettlementRow(
+            id = "settlement-3",
+            settledBy = "BASTI",
+            settledAt = "invalid",
+            balanceSnapshot = 5.0,
+        )
+
+        assertNull(row.toDomain())
+    }
 }

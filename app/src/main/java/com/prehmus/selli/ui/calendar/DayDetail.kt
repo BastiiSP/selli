@@ -143,7 +143,7 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
         onClick = onClick,
     ) {
         Row(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             // Farbkapsel: Personenfarbe, bzw. der Lila-Grün-Verlauf für Wir-Zeit
@@ -157,17 +157,21 @@ private fun EventCard(event: CalendarEvent, onClick: () -> Unit, modifier: Modif
             Box(
                 modifier = Modifier
                     .width(5.dp)
-                    .size(width = 5.dp, height = 44.dp)
+                    .size(width = 5.dp, height = 38.dp)
                     .background(capsuleBrush, CircleShape),
             )
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 10.dp),
             ) {
+                // Ein Schritt kleiner als im Kalenderraster (titleMedium -> titleSmall):
+                // die Terminliste wirkte gegenüber der Kalenderansicht überladen. Kapsel-
+                // höhe und Innenabstand ziehen proportional mit, sonst bliebe die Zeile
+                // trotz kleinerer Schrift gleich hoch.
                 Text(
                     text = event.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Row(verticalAlignment = Alignment.CenterVertically) {

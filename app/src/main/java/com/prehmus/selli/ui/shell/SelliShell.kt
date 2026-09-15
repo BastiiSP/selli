@@ -10,6 +10,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
@@ -28,8 +31,6 @@ import com.prehmus.selli.ui.calendar.CalendarViewModel
 import com.prehmus.selli.ui.expenses.ExpensesScreen
 import com.prehmus.selli.ui.expenses.ExpensesViewModel
 import com.prehmus.selli.ui.home.HomeScreen
-import com.prehmus.selli.ui.ideen.FolderDetailScreen
-import com.prehmus.selli.ui.ideen.FolderDetailViewModel
 import com.prehmus.selli.ui.ideen.IdeenScreen
 import com.prehmus.selli.ui.ideen.IdeenViewModel
 import com.prehmus.selli.ui.location.LocationScreen
@@ -58,10 +59,10 @@ fun SelliShell(
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val currentDestination = SelliDestination.fromRoute(currentRoute) ?: SelliStartDestination
-    // Sowohl Einstellungen als auch die Ordner-Detailansicht sind Vollbild-Screens ohne
-    // globale Top-/Bottom-Bar — die Ordner-Detailansicht bringt ihren eigenen Header mit
-    // Zurück-Pfeil mit (siehe FolderDetailScreen).
-    val isFullScreenRoute = currentRoute == SETTINGS_ROUTE || currentRoute == IDEEN_FOLDER_ROUTE
+    // Nur noch der Profil-/Einstellungsbereich ist Vollbild ohne globale Top-/Bottom-Bar.
+    // Die Ordner-Route zeigt seit dem Inline-Aufklappen die normale Ideen-Übersicht und
+    // behält das Gerüst deshalb.
+    val isFullScreenRoute = currentRoute == SETTINGS_ROUTE
 
     val calendarViewModel: CalendarViewModel = viewModel(
         factory = CalendarViewModel.factory(
@@ -70,13 +71,25 @@ fun SelliShell(
             dependencies.eventCustomizationRepository,
         ),
     )
+    // Ziel eines Ideen-Deep-Links (Benachrichtigung "Neue Idee") — die Ideen-Route selbst
+    // trägt keinen Ordner in der Navigation, deshalb hier zwischengehalten.
+    var pendingIdeenFolderId by remember { mutableStateOf<String?>(null) }
 
-    // Antippen einer Wir-Zeit-Benachrichtigung soll nicht nur den Termin öffnen, sondern
-    // auch im Kalender-Tab landen — sonst öffnet sich das Sheet über dem Homescreen.
+    // Antippen einer Benachrichtigung soll nicht nur den Inhalt laden, sondern auch im
+    // passenden Tab landen — sonst öffnet sich z. B. das Termin-Sheet über dem Homescreen.
     LaunchedEffect(deepLink) {
-        val target = deepLink ?: return@LaunchedEffect
-        navController.switchTo(SelliDestination.CALENDAR)
-        calendarViewModel.openDeepLinkedEvent(target.day, target.eventKey)
+        when (val target = deepLink) {
+            null -> return@LaunchedEffect
+            is SelliDeepLink.Event -> {
+                navController.switchTo(SelliDestination.CALENDAR)
+                calendarViewModel.openDeepLinkedEvent(target.day, target.eventKey)
+            }
+            is SelliDeepLink.Expenses -> navController.switchTo(SelliDestination.EXPENSES)
+            is SelliDeepLink.IdeenFolder -> {
+                navController.switchTo(SelliDestination.IDEEN)
+                pendingIdeenFolderId = target.folderId
+            }
+        }
         onDeepLinkHandled()
     }
 
@@ -111,24 +124,26 @@ fun SelliShell(
                 )
                 IdeenScreen(
                     viewModel = ideenViewModel,
-                    onOpenFolder = { folderId -> navController.navigate(ideenFolderRoute(folderId)) },
+                    initialExpandedFolderId = pendingIdeenFolderId,
                 )
             }
+            // Ordner haben keine eigene Unterseite mehr — sie klappen in der Übersicht auf.
+            // Die Route bleibt als Einsprungpunkt von außen bestehen (Benachrichtigung
+            // „Neue Idee") und zeigt dieselbe Übersicht mit dem genannten Ordner offen.
             composable(
                 route = IDEEN_FOLDER_ROUTE,
                 arguments = listOf(navArgument("folderId") { type = NavType.StringType }),
             ) { backStackEntry ->
                 val folderId = backStackEntry.arguments?.getString("folderId") ?: return@composable
-                val folderDetailViewModel: FolderDetailViewModel = viewModel(
-                    factory = FolderDetailViewModel.factory(
+                val ideenViewModel: IdeenViewModel = viewModel(
+                    factory = IdeenViewModel.factory(
                         repository = dependencies.noteRepository,
-                        folderId = folderId,
                         ownPerson = ownPerson,
                     ),
                 )
-                FolderDetailScreen(
-                    viewModel = folderDetailViewModel,
-                    onBack = { navController.popBackStack() },
+                IdeenScreen(
+                    viewModel = ideenViewModel,
+                    initialExpandedFolderId = folderId,
                 )
             }
             composable(SelliDestination.HOME.route) {

@@ -17,8 +17,21 @@ import com.prehmus.selli.ui.auth.AuthViewModel
 import com.prehmus.selli.ui.auth.SignInScreen
 import com.prehmus.selli.ui.shell.SelliShell
 
-/** Zieltermin einer angetippten Wir-Zeit-Benachrichtigung. */
-data class SelliDeepLink(val day: LocalDate, val eventKey: EventKey)
+/**
+ * Ziel einer angetippten Benachrichtigung. `SharedEventNotifier` (Wir-Zeit-Termine) und
+ * `PartnerActivityNotifier` (neue Ausgabe/Idee des Partners) hängen dafür unterschiedliche
+ * Extras an denselben `MainActivity`-Intent.
+ */
+sealed interface SelliDeepLink {
+    /** Zieltermin einer angetippten Wir-Zeit-Benachrichtigung. */
+    data class Event(val day: LocalDate, val eventKey: EventKey) : SelliDeepLink
+
+    /** Neue Ausgabe des Partners — Ziel ist einfach der Kosten-Tab. */
+    data object Expenses : SelliDeepLink
+
+    /** Neuer Ideen-Punkt des Partners — Ziel ist der Ideen-Tab mit aufgeklapptem Ordner. */
+    data class IdeenFolder(val folderId: String) : SelliDeepLink
+}
 
 /**
  * App-Wurzel: Anmeldegate vor dem App-Gerüst. Die Abhängigkeiten liefert die

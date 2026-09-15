@@ -2,6 +2,7 @@ package com.prehmus.selli.ui.preview
 
 import com.prehmus.selli.AppDependencies
 import com.prehmus.selli.domain.CalendarMergeService
+import com.prehmus.selli.domain.finance.prepareSettlement
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
@@ -17,6 +18,7 @@ import com.prehmus.selli.domain.model.NoteItem
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.model.SessionState
+import com.prehmus.selli.domain.model.Settlement
 import com.prehmus.selli.domain.places.LocationSuggestion
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
@@ -319,6 +321,7 @@ class PreviewDependencies : AppDependencies {
     // In-Memory-Fake fürs Kostentracking, damit die Preview ohne Supabase auskommt.
     override val expenseRepository: ExpenseRepository = object : ExpenseRepository {
         private val stored = mutableListOf<Expense>()
+        private val storedSettlements = mutableListOf<Settlement>()
 
         override suspend fun loadExpenses(): List<Expense> = stored.sortedByDescending { it.createdAt }
 
@@ -368,12 +371,28 @@ class PreviewDependencies : AppDependencies {
         }
 
         override suspend fun settle(settledBy: Person): Result<Unit> {
-            val settlementId = "settlement-${idCounter.incrementAndGet()}"
+            // Spiegelt SupabaseExpenseRepository.settle(): dieselbe reine Vorbereitung,
+            // damit die Preview denselben Saldo-Schnappschuss zeigt wie die echte App.
+            val result = prepareSettlement(
+                expenses = stored,
+                settledBy = settledBy,
+                settlementId = "settlement-${idCounter.incrementAndGet()}",
+                now = Instant.now(),
+            )
+            if (result.settledExpenseIds.isEmpty()) return Result.success(Unit)
+            storedSettlements += result.settlement
             stored.replaceAll { expense ->
-                if (expense.settlementId == null) expense.copy(settlementId = settlementId) else expense
+                if (expense.id in result.settledExpenseIds) {
+                    expense.copy(settlementId = result.settlement.id)
+                } else {
+                    expense
+                }
             }
             return Result.success(Unit)
         }
+
+        override suspend fun loadSettlements(): List<Settlement> =
+            storedSettlements.sortedByDescending { it.settledAt }
     }
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {

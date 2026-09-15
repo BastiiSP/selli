@@ -15,11 +15,16 @@ enum class SelliDestination(val route: String, val label: String) {
 
     companion object {
         /**
-         * Ziel zur Route, oder `null` für unbekannte Routen und für Einstellungen/
-         * Ordner-Detail — die sind bewusst keine Bottom-Navigation-Ziele.
+         * Ziel zur Route, oder `null` für unbekannte Routen und für die Einstellungen —
+         * die sind bewusst kein Bottom-Navigation-Ziel.
+         *
+         * Die Ordner-Route zählt als „Ideen": sie zeigt dieselbe Übersicht mit einem
+         * aufgeklappten Ordner, also muss die Leiste auch „Ideen" hervorheben.
          */
-        fun fromRoute(route: String?): SelliDestination? =
-            entries.firstOrNull { destination -> destination.route == route }
+        fun fromRoute(route: String?): SelliDestination? = when (route) {
+            IDEEN_FOLDER_ROUTE -> IDEEN
+            else -> entries.firstOrNull { destination -> destination.route == route }
+        }
     }
 }
 
@@ -27,10 +32,12 @@ enum class SelliDestination(val route: String, val label: String) {
 const val SETTINGS_ROUTE = "settings"
 
 /**
- * Ordner-Detailansicht (Ebene 2 von "Ideen"): wie [SETTINGS_ROUTE] ein Vollbild-Screen ohne
- * globale Top-/Bottom-Bar, mit eigenem Header (siehe `FolderDetailScreen`). Der Ordnername
- * wird bewusst nicht als Argument mitgegeben (URL-unsichere Zeichen möglich) — siehe
- * `FolderDetailViewModel.refresh()`.
+ * Einsprungpunkt auf einen bestimmten Ordner. Seit dem 15.09.2026 gibt es dafür keine eigene
+ * Unterseite mehr — die Route zeigt dieselbe Ideen-Übersicht wie [SelliDestination.IDEEN],
+ * nur mit dem genannten Ordner aufgeklappt (siehe `IdeenScreen.initialExpandedFolderId`).
+ * Gedacht für Navigation von außen, etwa die „Neue Idee"-Benachrichtigung, die die Ordner-ID
+ * bereits als Extra mitschickt. Der Ordnername wird bewusst nicht als Argument mitgegeben,
+ * weil er URL-unsichere Zeichen enthalten kann.
  */
 const val IDEEN_FOLDER_ROUTE = "ideen/{folderId}"
 

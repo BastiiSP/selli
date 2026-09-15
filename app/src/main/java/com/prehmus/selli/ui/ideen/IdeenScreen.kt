@@ -1,6 +1,9 @@
 package com.prehmus.selli.ui.ideen
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -23,6 +27,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,27 +49,38 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.model.NoteFolder
+import com.prehmus.selli.domain.model.NoteItem
 
 /**
  * Sitzt in `SelliShell` zwischen `SelliTopBar`/`SelliBottomBar` — `contentWindowInsets`
  * bleibt deshalb auf 0 (siehe Begründung im Kalender-Bugfix vom 14.09.2026: dieses
  * Scaffold berührt nie die echten Bildschirmkanten, ein Reservieren von Systemleisten-
  * Insets hier würde nur einen ungenutzten schwarzen Balken erzeugen).
+ *
+ * Ordner klappen seit dem 15.09.2026 direkt hier auf, statt auf eine eigene Unterseite zu
+ * führen — der Weg zum eigentlichen Inhalt war sonst ein Klick zu lang. [initialExpandedFolderId]
+ * hält die Navigation von außen am Leben (Route `ideen/{folderId}`, Benachrichtigung „Neue
+ * Idee"): der genannte Ordner startet aufgeklappt.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IdeenScreen(
     viewModel: IdeenViewModel,
-    onOpenFolder: (folderId: String) -> Unit,
     modifier: Modifier = Modifier,
+    initialExpandedFolderId: String? = null,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(initialExpandedFolderId) {
+        initialExpandedFolderId?.let(viewModel::expandFolder)
+    }
 
     LaunchedEffect(uiState.userMessage) {
         uiState.userMessage?.let { message ->
@@ -74,9 +90,8 @@ fun IdeenScreen(
     }
 
     // Kein Realtime-Sync (siehe Spec): Der Tab hängt an der NavHost-Backstack-Entry und
-    // überlebt dank saveState/restoreState sowohl den Tab-Wechsel als auch den Ausflug in die
-    // Ordner-Detailansicht — ohne diesen Hook blieben Zähler/Ordnerliste nach dem Zurückkommen
-    // stehen (analog ExpensesScreen/FolderDetailScreen).
+    // überlebt dank saveState/restoreState den Tab-Wechsel — ohne diesen Hook würde nach
+    // dem allerersten Besuch nie wieder automatisch nachgeladen, nur noch per Pull-to-Refresh.
     LifecycleResumeEffect(Unit) {
         viewModel.refresh()
         onPauseOrDispose { }
@@ -115,7 +130,15 @@ fun IdeenScreen(
                         FolderCard(
                             folder = folder,
                             openCount = uiState.openCountByFolder[folder.id] ?: 0,
-                            onClick = { onOpenFolder(folder.id) },
+                            isExpanded = folder.id in uiState.expandedFolderIds,
+                            openItems = uiState.openItems(folder.id),
+                            archivedItems = uiState.archivedItems(folder.id),
+                            isArchiveExpanded = folder.id in uiState.expandedArchiveFolderIds,
+                            onToggleExpanded = { viewModel.toggleFolderExpanded(folder.id) },
+                            onToggleArchive = { viewModel.toggleArchiveExpanded(folder.id) },
+                            onAddItem = { viewModel.openAddItemSheet(folder.id) },
+                            onItemCheckedChange = viewModel::setChecked,
+                            onItemClick = viewModel::beginEditingItem,
                             onRename = { viewModel.beginRenaming(folder) },
                             onDelete = { viewModel.beginDeleting(folder) },
                         )
@@ -143,6 +166,45 @@ fun IdeenScreen(
         )
     }
 
+    if (uiState.addingItemToFolder != null) {
+        NoteItemSheet(
+            title = "Punkt hinzufügen",
+            initialText = "",
+            initialUrl = "",
+            isSaving = uiState.isSavingItem,
+            onSave = viewModel::addItem,
+            onDismiss = viewModel::dismissAddItemSheet,
+        )
+    }
+
+    uiState.editingItem?.let { item ->
+        NoteItemSheet(
+            title = "Punkt bearbeiten",
+            initialText = item.text,
+            initialUrl = item.url.orEmpty(),
+            isSaving = false,
+            onSave = viewModel::saveItemEdit,
+            onDismiss = viewModel::dismissEditingItem,
+            onDelete = { viewModel.beginDeletingItem(item) },
+        )
+    }
+
+    uiState.deletingItem?.let { item ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissDeletingItem,
+            title = { Text("Punkt löschen?") },
+            text = { Text("\"${item.text}\" wird endgültig entfernt.") },
+            confirmButton = {
+                TextButton(onClick = viewModel::confirmDeleteItem) {
+                    Text("Löschen", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissDeletingItem) { Text("Abbrechen") }
+            },
+        )
+    }
+
     uiState.deletingFolder?.let { folder ->
         val total = uiState.totalCountByFolder[folder.id] ?: 0
         AlertDialog(
@@ -163,56 +225,147 @@ fun IdeenScreen(
     }
 }
 
+/**
+ * Ordnerkarte mit aufklappbarem Inhalt. Kopfzeile und Punkte liegen in derselben Karte,
+ * damit ein aufgeklappter Ordner als ein zusammenhängendes Stück lesbar bleibt.
+ */
 @Composable
 private fun FolderCard(
     folder: NoteFolder,
     openCount: Int,
-    onClick: () -> Unit,
+    isExpanded: Boolean,
+    openItems: List<NoteItem>,
+    archivedItems: List<NoteItem>,
+    isArchiveExpanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onToggleArchive: () -> Unit,
+    onAddItem: () -> Unit,
+    onItemCheckedChange: (NoteItem, Boolean) -> Unit,
+    onItemClick: (NoteItem) -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        label = "folderChevron",
+    )
+
     Surface(
-        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surface,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                Text(text = folder.name, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    text = "$openCount offen",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Box {
-                IconButton(onClick = { menuExpanded = true }) {
-                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Optionen")
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onToggleExpanded)
+                    .padding(start = 16.dp, top = 12.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = folder.name, style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        text = "$openCount offen",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Umbenennen") },
-                        onClick = { menuExpanded = false; onRename() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Löschen") },
-                        onClick = { menuExpanded = false; onDelete() },
-                    )
+                Icon(
+                    imageVector = Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Ordner zuklappen" else "Ordner aufklappen",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Wert erst im Layout-/Draw-Schritt lesen statt im Composable-Rumpf.
+                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
+                )
+                Box {
+                    IconButton(onClick = { menuExpanded = true }) {
+                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = "Optionen")
+                    }
+                    DropdownMenu(
+                        expanded = menuExpanded,
+                        onDismissRequest = { menuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Umbenennen") },
+                            onClick = { menuExpanded = false; onRename() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Löschen") },
+                            onClick = { menuExpanded = false; onDelete() },
+                        )
+                    }
+                }
+            }
+
+            AnimatedVisibility(visible = isExpanded) {
+                Column(modifier = Modifier.padding(bottom = 4.dp)) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    if (openItems.isEmpty() && archivedItems.isEmpty()) {
+                        Text(
+                            text = "Noch keine Punkte",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        )
+                    }
+
+                    openItems.forEach { item ->
+                        NoteItemCard(
+                            item = item,
+                            onCheckedChange = { checked -> onItemCheckedChange(item, checked) },
+                            onClick = { onItemClick(item) },
+                        )
+                    }
+
+                    if (archivedItems.isNotEmpty()) {
+                        TextButton(
+                            onClick = onToggleArchive,
+                            modifier = Modifier.padding(start = 4.dp),
+                        ) {
+                            Text(
+                                if (isArchiveExpanded) {
+                                    "Erledigt (${archivedItems.size}) ausblenden"
+                                } else {
+                                    "Erledigt (${archivedItems.size})"
+                                },
+                            )
+                        }
+                        AnimatedVisibility(visible = isArchiveExpanded) {
+                            Column {
+                                archivedItems.forEach { item ->
+                                    NoteItemCard(
+                                        item = item,
+                                        onCheckedChange = { checked ->
+                                            onItemCheckedChange(item, checked)
+                                        },
+                                        onClick = { onItemClick(item) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    TextButton(onClick = onAddItem, modifier = Modifier.padding(start = 4.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(text = "Punkt hinzufügen", modifier = Modifier.padding(start = 8.dp))
+                    }
                 }
             }
         }
     }
 }
 
-/** Wiederverwendet von `FolderDetailScreen` (Task 16) für den "Noch keine Punkte"-Leerzustand. */
+/** Leerzustand der Ordnerliste. */
 @Composable
-internal fun IdeenEmptyHint(message: String, modifier: Modifier = Modifier) {
+private fun IdeenEmptyHint(message: String, modifier: Modifier = Modifier) {
     Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

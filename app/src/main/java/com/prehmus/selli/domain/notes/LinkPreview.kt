@@ -15,14 +15,49 @@ fun interface LinkPreviewFetcher {
 /**
  * Reine Extraktion aus einem bereits geladenen HTML-Dokument — getrennt vom Netzwerk-Fetch
  * (siehe `JsoupLinkPreviewFetcher`), damit sie ohne echten HTTP-Request testbar ist.
- * Bevorzugt Open-Graph-Tags, fällt auf `<title>` zurück.
+ * Bevorzugt Open-Graph-Tags und fällt auf weitere verbreitete Link-Metadaten zurück.
  */
 fun parseLinkPreview(document: Document): LinkPreview {
-    val ogTitle = document.select("meta[property=og:title]").attr("content").takeUnless(String::isBlank)
-    val title = ogTitle ?: document.title().takeUnless(String::isBlank)
-    val ogImage = document.select("meta[property=og:image]")
-    val imageUrl = ogImage.attr("abs:content")
-        .ifBlank { ogImage.attr("content") }
-        .takeUnless(String::isBlank)
+    val title = document.firstNonBlankAttribute(
+        "content",
+        "meta[property=og:title]",
+        "meta[name=og:title]",
+        "meta[name=twitter:title]",
+        "meta[property=twitter:title]",
+    ) ?: document.title().takeUnless(String::isBlank)
+    val imageUrl = document.firstResolvedAttribute(
+        "meta[property=og:image]" to "content",
+        "meta[name=og:image]" to "content",
+        "meta[property=og:image:url]" to "content",
+        "meta[name=twitter:image]" to "content",
+        "meta[name=twitter:image:src]" to "content",
+        "meta[property=twitter:image]" to "content",
+        "meta[property=twitter:image:src]" to "content",
+        "link[rel=image_src]" to "href",
+        "meta[itemprop=image]" to "content",
+    )
     return LinkPreview(title = title, imageUrl = imageUrl)
 }
+
+private fun Document.firstNonBlankAttribute(
+    attribute: String,
+    vararg selectors: String,
+): String? = selectors.asSequence()
+    .flatMap { selector ->
+        select(selector).asSequence()
+    }
+    .mapNotNull { element -> element.attr(attribute).takeUnless(String::isBlank) }
+    .firstOrNull()
+
+private fun Document.firstResolvedAttribute(
+    vararg candidates: Pair<String, String>,
+): String? = candidates.asSequence()
+    .flatMap { (selector, attribute) ->
+        select(selector).asSequence().map { element ->
+            element.attr("abs:$attribute")
+                .ifBlank { element.attr(attribute) }
+                .takeUnless(String::isBlank)
+        }
+    }
+    .filterNotNull()
+    .firstOrNull()

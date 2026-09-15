@@ -2,6 +2,7 @@ package com.prehmus.selli.domain.repository
 
 import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.domain.model.Settlement
 import java.time.LocalDate
 
 interface ExpenseRepository {
@@ -29,4 +30,7 @@ interface ExpenseRepository {
 
     /** Gleicht alle offenen Ausgaben aus (stempelt sie auf ein neues Settlement). */
     suspend fun settle(settledBy: Person): Result<Unit>
+
+    /** Alle Ausgleichsvorgänge, neueste zuerst. Liefert bei Problemen eine leere Liste statt zu werfen. */
+    suspend fun loadSettlements(): List<Settlement>
 }

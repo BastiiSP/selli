@@ -12,6 +12,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
+import com.prehmus.selli.data.notification.PartnerActivityNotifier
 import com.prehmus.selli.data.notification.SharedEventNotifier
 import com.prehmus.selli.data.widget.WidgetRefreshScheduler
 import com.prehmus.selli.domain.model.CalendarSource
@@ -79,8 +80,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Die drei Extras, die [SharedEventNotifier] an die Benachrichtigung hängt. */
-private fun Intent.toSelliDeepLink(): SelliDeepLink? {
+/**
+ * Zwei mögliche Benachrichtigungsquellen hängen unterschiedliche Extras an denselben Intent:
+ * [SharedEventNotifier] (Wir-Zeit-Termin) und [PartnerActivityNotifier] (neue Ausgabe/Idee).
+ * Robust gegen fehlende/kaputte Extras (z. B. durch eine App-Aktualisierung) — dann einfach
+ * kein Deep-Link statt Absturz.
+ */
+private fun Intent.toSelliDeepLink(): SelliDeepLink? =
+    toEventDeepLink() ?: toPartnerActivityDeepLink()
+
+private fun Intent.toEventDeepLink(): SelliDeepLink.Event? {
     val day = getStringExtra(SharedEventNotifier.EXTRA_DAY)
         ?.let { value -> runCatching { LocalDate.parse(value) }.getOrNull() }
         ?: return null
@@ -91,5 +100,15 @@ private fun Intent.toSelliDeepLink(): SelliDeepLink? {
         ?.takeUnless(String::isBlank)
         ?: return null
 
-    return SelliDeepLink(day = day, eventKey = EventKey(source = source, eventId = eventId))
+    return SelliDeepLink.Event(day = day, eventKey = EventKey(source = source, eventId = eventId))
 }
+
+private fun Intent.toPartnerActivityDeepLink(): SelliDeepLink? =
+    when (getStringExtra(PartnerActivityNotifier.EXTRA_DESTINATION)) {
+        PartnerActivityNotifier.DESTINATION_EXPENSES -> SelliDeepLink.Expenses
+        PartnerActivityNotifier.DESTINATION_IDEEN ->
+            getStringExtra(PartnerActivityNotifier.EXTRA_FOLDER_ID)
+                ?.takeUnless(String::isBlank)
+                ?.let { folderId -> SelliDeepLink.IdeenFolder(folderId) }
+        else -> null
+    }

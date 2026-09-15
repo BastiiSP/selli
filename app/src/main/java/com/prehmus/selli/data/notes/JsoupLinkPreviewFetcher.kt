@@ -18,6 +18,11 @@ class JsoupLinkPreviewFetcher(
         try {
             withTimeoutOrNull(TIMEOUT_MILLIS) {
                 val document = Jsoup.connect(url)
+                    .userAgent(USER_AGENT)
+                    .followRedirects(true)
+                    .ignoreHttpErrors(true)
+                    .ignoreContentType(false)
+                    .maxBodySize(MAX_BODY_SIZE_BYTES)
                     .timeout(TIMEOUT_MILLIS.toInt())
                     .get()
                 parseLinkPreview(document)
@@ -32,6 +37,12 @@ class JsoupLinkPreviewFetcher(
 
     private companion object {
         const val TIMEOUT_MILLIS = 5_000L
+        const val MAX_BODY_SIZE_BYTES = 1_048_576
         const val SOURCE = "Link-Vorschau"
+
+        // Der generische Jsoup-User-Agent wird von manchen Bot-Walls blockiert.
+        const val USER_AGENT =
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
     }
 }
