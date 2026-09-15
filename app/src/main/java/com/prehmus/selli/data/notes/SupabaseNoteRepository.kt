@@ -21,21 +21,27 @@ class SupabaseNoteRepository(
     private val logger: CalendarLogger = NoOpCalendarLogger,
 ) : NoteRepository {
 
-    override suspend fun loadFolders(): List<NoteFolder> {
-        if (!client.isConfigured) return emptyList()
-        if (client.ensureSignedIn().isFailure) return emptyList()
-        val supabase = client.client ?: return emptyList()
+    override suspend fun loadFolders(): List<NoteFolder> =
+        loadFoldersResult().getOrElse { emptyList() }
+
+    override suspend fun loadFoldersResult(): Result<List<NoteFolder>> {
+        if (!client.isConfigured) return Result.success(emptyList())
+        client.ensureSignedIn().onFailure { error -> return Result.failure(error) }
+        val supabase = client.client
+            ?: return Result.failure(IllegalStateException("Supabase ist nicht konfiguriert."))
 
         return try {
-            supabase.from(FOLDERS_TABLE)
-                .select { order("created_at", order = Order.DESCENDING) }
-                .decodeList<NoteFolderRow>()
-                .mapNotNull(NoteFolderRow::toDomain)
+            Result.success(
+                supabase.from(FOLDERS_TABLE)
+                    .select { order("created_at", order = Order.DESCENDING) }
+                    .decodeList<NoteFolderRow>()
+                    .mapNotNull(NoteFolderRow::toDomain),
+            )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
             logError(SOURCE_LOAD_FOLDERS, error)
-            emptyList()
+            Result.failure(error)
         }
     }
 
@@ -68,24 +74,30 @@ class SupabaseNoteRepository(
         Unit
     }.onFailure { error -> logError(SOURCE_DELETE_FOLDER, error) }
 
-    override suspend fun loadItems(folderId: String): List<NoteItem> {
-        if (!client.isConfigured) return emptyList()
-        if (client.ensureSignedIn().isFailure) return emptyList()
-        val supabase = client.client ?: return emptyList()
+    override suspend fun loadItems(folderId: String): List<NoteItem> =
+        loadItemsResult(folderId).getOrElse { emptyList() }
+
+    override suspend fun loadItemsResult(folderId: String): Result<List<NoteItem>> {
+        if (!client.isConfigured) return Result.success(emptyList())
+        client.ensureSignedIn().onFailure { error -> return Result.failure(error) }
+        val supabase = client.client
+            ?: return Result.failure(IllegalStateException("Supabase ist nicht konfiguriert."))
 
         return try {
-            supabase.from(ITEMS_TABLE)
-                .select {
-                    order("created_at", order = Order.DESCENDING)
-                    filter { eq("folder_id", folderId) }
-                }
-                .decodeList<NoteItemRow>()
-                .mapNotNull(NoteItemRow::toDomain)
+            Result.success(
+                supabase.from(ITEMS_TABLE)
+                    .select {
+                        order("created_at", order = Order.DESCENDING)
+                        filter { eq("folder_id", folderId) }
+                    }
+                    .decodeList<NoteItemRow>()
+                    .mapNotNull(NoteItemRow::toDomain),
+            )
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (error: Throwable) {
             logError(SOURCE_LOAD_ITEMS, error)
-            emptyList()
+            Result.failure(error)
         }
     }
 

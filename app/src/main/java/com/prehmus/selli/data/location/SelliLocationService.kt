@@ -128,6 +128,20 @@ class SelliLocationService : Service() {
         super.onDestroy()
     }
 
+    /**
+     * Manche OEM-Akkumanager (u. a. Samsung One UI) killen einen Foreground-Service, sobald die
+     * App aus "Zuletzt verwendet" gewischt wird — trotz laufender Benachrichtigung und obwohl
+     * `START_STICKY` einen Neustart nach echtem Speicherdruck bereits abdeckt. Dieser Callback
+     * feuert genau in dem Moment und stößt den Dienst aktiv neu an, statt auf den nächsten
+     * Öffnen des Standort-Tabs zu warten.
+     */
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        if (hasFineLocationPermission()) {
+            start(applicationContext)
+        }
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun handleLocation(location: Location) {

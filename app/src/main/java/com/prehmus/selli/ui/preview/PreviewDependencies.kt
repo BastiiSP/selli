@@ -247,6 +247,9 @@ class PreviewDependencies : AppDependencies {
 
         override suspend fun loadFolders(): List<NoteFolder> = folders.sortedBy { it.name }
 
+        override suspend fun loadFoldersResult(): Result<List<NoteFolder>> =
+            Result.success(loadFolders())
+
         override suspend fun addFolder(name: String, createdBy: Person): Result<NoteFolder> {
             val folder = NoteFolder(
                 id = "folder-${idCounter.incrementAndGet()}",
@@ -272,6 +275,9 @@ class PreviewDependencies : AppDependencies {
 
         override suspend fun loadItems(folderId: String): List<NoteItem> =
             items.filter { it.folderId == folderId }
+
+        override suspend fun loadItemsResult(folderId: String): Result<List<NoteItem>> =
+            Result.success(loadItems(folderId))
 
         override suspend fun addItem(
             folderId: String,

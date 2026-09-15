@@ -310,11 +310,13 @@ private fun BalanceCard(
  * Ausgabenkarte. Offene Posten tragen zusätzlich zur Namens-Pill den sanften Container-Ton
  * der Person, die bezahlt hat — ausgeglichene treten neutral und durchgestrichen zurück,
  * damit der Unterschied auch ohne Lesen der Überschrift sofort sichtbar ist.
+ *
+ * Die Karte selbst ist bewusst nicht klickbar — nur [EditCircleButton] öffnet das
+ * Bearbeiten-Sheet, sonst kollidiert ein Kartentipp mit der Wisch-Geste zum Löschen.
  */
 @Composable
 private fun ExpenseCard(expense: Expense, isSettled: Boolean, onEdit: () -> Unit) {
     Surface(
-        onClick = onEdit,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         color = if (isSettled) {

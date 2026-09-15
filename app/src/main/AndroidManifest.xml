@@ -8,6 +8,8 @@
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Standort-Dienst nach einem Geräte-Neustart wieder anstoßen (siehe LocationBootReceiver). -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!--
         Ab Android 11 sieht eine App fremde Pakete nur noch, wenn sie sie hier nennt.
@@ -61,6 +63,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/selli_widget_info" />
+        </receiver>
+
+        <!--
+            Robustheitslücke aus dem Nutzungstest vom 15.09.2026: der Standort-Dienst startete
+            bisher nur beim Öffnen des Standort-Tabs, nie nach einem Geräte-Neustart.
+        -->
+        <receiver
+            android:name=".data.location.LocationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
         </receiver>
     </application>
 

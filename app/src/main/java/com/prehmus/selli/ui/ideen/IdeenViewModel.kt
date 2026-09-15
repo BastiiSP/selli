@@ -72,9 +72,32 @@ class IdeenViewModel(
         refreshJob?.cancel()
         _uiState.update { it.copy(isRefreshing = true) }
         refreshJob = viewModelScope.launch {
-            val folders = repository.loadFolders()
+            // Bewusst die Result-Varianten statt loadFolders()/loadItems(): deren Vertrag macht
+            // aus jedem Ladefehler (z. B. offline, kurzer Netzwerk-Hänger beim Tab-Wechsel) eine
+            // leere Liste — das hätte hier eine bereits sichtbare, nicht-leere Ansicht fälschlich
+            // mit "Keine Ideen" überschrieben, bis der nächste Refresh zufällig wieder klappt.
+            val foldersResult = repository.loadFoldersResult()
+            val folders = foldersResult.getOrNull()
+            if (folders == null) {
+                _uiState.update {
+                    it.copy(
+                        isRefreshing = false,
+                        userMessage = "Ideen konnten nicht aktualisiert werden.",
+                    )
+                }
+                return@launch
+            }
+
+            val previousItems = _uiState.value.itemsByFolder
+            var anyItemLoadFailed = false
             val itemsByFolder = folders.associate { folder ->
-                folder.id to repository.loadItems(folder.id)
+                val result = repository.loadItemsResult(folder.id)
+                val items = result.getOrNull()
+                if (items == null) anyItemLoadFailed = true
+                // Bei Fehler lieber die zuletzt bekannten Punkte dieses Ordners behalten als
+                // ihn fälschlich leer zu zeigen — betrifft z. B. einen frisch angelegten Ordner
+                // noch nicht (dort gibt es schlicht noch keine "letzten" Punkte, leer ist korrekt).
+                folder.id to (items ?: previousItems[folder.id].orEmpty())
             }
             _uiState.update { state ->
                 state.copy(
@@ -89,6 +112,11 @@ class IdeenViewModel(
                     expandedArchiveFolderIds =
                         state.expandedArchiveFolderIds.intersect(itemsByFolder.keys),
                     isRefreshing = false,
+                    userMessage = if (anyItemLoadFailed) {
+                        "Manche Ideen konnten nicht aktualisiert werden."
+                    } else {
+                        state.userMessage
+                    },
                 )
             }
         }
