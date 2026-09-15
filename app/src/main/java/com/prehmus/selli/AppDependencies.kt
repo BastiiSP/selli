@@ -7,6 +7,7 @@ import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 
@@ -31,6 +32,9 @@ interface AppDependencies {
 
     /** Gemeinsame Ausgaben (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
     val expenseRepository: ExpenseRepository
+
+    /** Gemeinsame Ideen-Ordner/-Punkte (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
+    val noteRepository: NoteRepository
 
     /**
      * false, wenn in `local.properties` keine Supabase-Zugangsdaten liegen — dann zeigt der

@@ -12,6 +12,8 @@ import com.prehmus.selli.domain.model.EventCustomization
 import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.FreeTimeBlock
 import com.prehmus.selli.domain.model.NewCalendarEvent
+import com.prehmus.selli.domain.model.NoteFolder
+import com.prehmus.selli.domain.model.NoteItem
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.model.SessionState
@@ -22,6 +24,7 @@ import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
 import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.Duration
@@ -234,6 +237,84 @@ class PreviewDependencies : AppDependencies {
     }
 
     override val isLocationSharingConfigured: Boolean = true
+
+    // In-Memory-Fake für die Ideen, damit die Preview ohne Supabase auskommt.
+    override val noteRepository: NoteRepository = object : NoteRepository {
+        private val folders = mutableListOf<NoteFolder>()
+        private val items = mutableListOf<NoteItem>()
+
+        override suspend fun loadFolders(): List<NoteFolder> = folders.sortedBy { it.name }
+
+        override suspend fun addFolder(name: String, createdBy: Person): Result<NoteFolder> {
+            val folder = NoteFolder(
+                id = "folder-${idCounter.incrementAndGet()}",
+                name = name,
+                createdBy = createdBy,
+                createdAt = Instant.now(),
+            )
+            folders += folder
+            return Result.success(folder)
+        }
+
+        override suspend fun renameFolder(id: String, name: String): Result<Unit> {
+            val index = folders.indexOfFirst { it.id == id }
+            if (index >= 0) folders[index] = folders[index].copy(name = name)
+            return Result.success(Unit)
+        }
+
+        override suspend fun deleteFolder(id: String): Result<Unit> {
+            folders.removeAll { it.id == id }
+            items.removeAll { it.folderId == id }
+            return Result.success(Unit)
+        }
+
+        override suspend fun loadItems(folderId: String): List<NoteItem> =
+            items.filter { it.folderId == folderId }
+
+        override suspend fun addItem(
+            folderId: String,
+            text: String,
+            url: String?,
+            createdBy: Person,
+        ): Result<NoteItem> {
+            val item = NoteItem(
+                id = "item-${idCounter.incrementAndGet()}",
+                folderId = folderId,
+                text = text,
+                url = url,
+                previewTitle = null,
+                previewImageUrl = null,
+                isChecked = false,
+                checkedAt = null,
+                createdBy = createdBy,
+                createdAt = Instant.now(),
+            )
+            items += item
+            return Result.success(item)
+        }
+
+        override suspend fun updateItem(id: String, text: String, url: String?): Result<Unit> {
+            val index = items.indexOfFirst { it.id == id }
+            if (index >= 0) items[index] = items[index].copy(text = text, url = url)
+            return Result.success(Unit)
+        }
+
+        override suspend fun setChecked(id: String, checked: Boolean): Result<Unit> {
+            val index = items.indexOfFirst { it.id == id }
+            if (index >= 0) {
+                items[index] = items[index].copy(
+                    isChecked = checked,
+                    checkedAt = if (checked) Instant.now() else null,
+                )
+            }
+            return Result.success(Unit)
+        }
+
+        override suspend fun deleteItem(id: String): Result<Unit> {
+            items.removeAll { it.id == id }
+            return Result.success(Unit)
+        }
+    }
 
     // In-Memory-Fake fürs Kostentracking, damit die Preview ohne Supabase auskommt.
     override val expenseRepository: ExpenseRepository = object : ExpenseRepository {
