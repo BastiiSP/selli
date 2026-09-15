@@ -133,6 +133,9 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     implementation(libs.maps.compose)
     implementation(libs.play.services.location)
+    implementation(libs.jsoup)
+    implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
