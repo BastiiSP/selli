@@ -53,21 +53,26 @@ Jede Datei hat genau einen Owner; keine Datei zwischen den Werkzeugen aufteilen.
 
 Direkte aktuelle Nutzeraufträge haben Vorrang. Vor Regeländerungen beide Dateien lesen und Unterschiede inhaltlich zusammenführen; gültige Regeln erhalten. AGENTS.md und CLAUDE.md unmittelbar gemeinsam ändern und danach mit `cmp` auf Bytegleichheit prüfen. Anbieterunterschiede ausdrücklich kennzeichnen und in beiden Dateien führen. Codex lädt AGENTS.md; Claude Code lädt bei diesem Paar CLAUDE.md.
 
-## Abschluss: Claudian-Update
+## Abschluss: AI Brain Update
 
-Nach jeder erledigten Implementierungsaufgabe dieses Format mit tatsächlichen Ergebnissen ausgeben; es ersetzt keine unabhängige Prüfung:
+Zum Abschluss, bei Übergabe oder Abbruch eines Arbeitsauftrags ein kompaktes, eigenständig verständliches Update in diesem Format ausgeben; auch bei Recherche, Planung und Dokumentation. Reine Zwischenfragen und Brainstorming normal und knapp beantworten. Projekt eindeutig benennen, Datum des Arbeitsstands in Europe/Berlin verwenden und tatsächliche Ergebnisse von Plänen unterscheiden. Alle vier Abschnitte beibehalten; fehlende Prüfungen und leere Angaben ehrlich kennzeichnen. Keine Zugangsdaten oder privaten absoluten Pfade aufnehmen. Das Update ersetzt keine unabhängige Prüfung und behauptet keine automatische Übertragung ins AI Brain.
+
 ```text
-## Claudian-Update – [Datum]
+## AI Brain Update – [Projekt] – [YYYY-MM-DD]
 
-### Implementiert
-- [Was gebaut / geändert wurde]
+**Projektkennung:** [Workspace-Ordner oder Repository]
+**Auftrag:** [Kurze Beschreibung]
+**Stand:** [abgeschlossen / teilweise / blockiert; Version oder Commit, falls vorhanden]
 
-### Getestet
-- [Was getestet wurde und Ergebnis]
+### Ergebnis
+- [Tatsächliche Änderungen oder Erkenntnisse; relevante Dateien/Artefakte]
 
-### Offen / Nächster Block
-- [Was als nächstes kommt]
+### Prüfung
+- [Durchgeführte Prüfung und Ergebnis; nicht geprüft bzw. unabhängige Abnahme offen ausdrücklich nennen]
 
-### Technische Notizen
-- [Wichtige Entscheidungen, neue Pakete, IDs etc.]
+### Offen / Nächster Schritt
+- [Offene Punkte, Blocker und nächster Schritt; sonst keine]
+
+### Hinweise
+- [Bestätigte Entscheidungen von Vorschlägen trennen; fachliche/technische Besonderheiten, neue Pakete, IDs etc.; sonst keine]
 ```

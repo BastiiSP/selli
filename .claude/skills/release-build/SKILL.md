@@ -33,9 +33,9 @@ festen Ablageort für Basti/Melli kopieren.
    `selli.apk` liegt im Projekt-Root, ist über `.gitignore` (`*.apk`)
    ausgeschlossen und wird bei jedem Lauf überschrieben.
 
-4. **Claudian-Update-Format ausgeben** (Format steht am Ende der Projekt-
-   `CLAUDE.md`) - Basti kopiert das Update in seinen Obsidian-Vault
-   (`02 Projekte/Selli.md`).
+4. **AI Brain Update** im Format der Projektwurzel (`CLAUDE.md`) ausgeben.
+   Ergebnisse der Unit-Tests, des APK-Builds und offene manuelle Testschritte
+   unter „Prüfung“ aufführen.
 
 ## Wann abbrechen statt weiterzumachen
 
