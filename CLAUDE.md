@@ -45,7 +45,7 @@ Jede Datei hat genau einen Owner; keine Datei zwischen den Werkzeugen aufteilen.
 ## Geheimnisse, Build und Übergabe
 
 - Öffentliches Repository: keine persönlichen Hintergründe, echten Konten/Termine, privaten Dokumentverweise oder Zugangsdaten aufnehmen.
-- Secrets nur in ignorierter `local.properties`, über `BuildConfig` bereitstellen. Keys: `selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`. Keine Werte in Code/Anweisungen.
+- Secrets nur in ignorierter `local.properties`, über `BuildConfig` bereitstellen. Keys: `selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`, `selli.signing.storeFile`/`storePassword`/`keyAlias`/`keyPassword`. Keine Werte in Code/Anweisungen. Der feste Debug-Signaturschlüssel liegt außerhalb des Repos und muss gesichert bleiben; Verlust ändert den SHA-1.
 - `./gradlew assembleDebug` und `./gradlew testDebugUnitTest`.
 - Nach abgeschlossener Entwicklungsaufgabe mit grünem Build/Tests `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Root kopieren und alte Fassung dort ersetzen. Einziger Übergabeort, kein Desktop und keine weiteren Kopien; `*.apk` bleibt ignoriert. Reine Anweisungspflege erfordert keinen neuen APK-Build.
 

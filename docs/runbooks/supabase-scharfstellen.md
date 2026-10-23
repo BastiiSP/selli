@@ -44,6 +44,12 @@ exist": einmal `./gradlew assembleDebug` laufen lassen, dann erneut.
 Auf diesem Mac (26.08.2026):
 `8A:B2:BB:7A:19:16:0F:DD:5F:C1:9F:AC:AA:E6:D1:D5:B7:21:1C:70`
 
+**Ergänzung 23.10.2026:** Seit diesem Datum wird ein fester Debug-Schlüssel verwendet
+(siehe README „Signatur“). Sein SHA-1 ist
+`2D:96:2C:62:BD:C5:65:33:D8:EF:91:84:16:3B:39:DF:31:43:51:20`. Der alte Fingerprint
+`8A:B2:…` ist verloren. Den neuen SHA-1 in der Maps-/Places-Schlüssel-Restriktion und beim
+Android-OAuth-Client ergänzen.
+
 Beide Handys bekommen dieselbe, hier gebaute APK → **ein** Fingerprint genügt. Wird
 irgendwann auf einem anderen Rechner oder mit Release-Keystore gebaut, muss dessen
 SHA-1 zusätzlich in den Maps-Key.

@@ -33,6 +33,23 @@ selli.mapsApiKey=...
 - `selli.mapsApiKey` — Google-Maps-Android-Schlüssel; **Maps SDK for Android** muss in der
   Cloud Console aktiviert sein
 
+### Signatur
+
+Debug-Builds können mit einem festen, projektspezifischen Keystore signiert werden. Trage
+dazu diese Werte lokal in `local.properties` ein (ohne Werte im Repository abzulegen):
+
+```properties
+selli.signing.storeFile=~/pfad/zum/selli-debug.keystore
+selli.signing.storePassword=...
+selli.signing.keyAlias=...
+selli.signing.keyPassword=...
+```
+
+Lege den Keystore außerhalb des Repositorys ab und sichere die Datei unbedingt separat.
+Geht sie verloren, brauchst du einen neuen SHA-1; installierte Builds müssen neu installiert
+werden. Trage den neuen SHA-1 in der Google Cloud Console bei der Maps-/Places-Schlüssel-
+Restriktion und beim Android-OAuth-Client nach.
+
 Fehlen diese Werte, bleibt das Standort-Feature inaktiv; der Rest der App läuft normal. Das
 entspricht dem Verhalten beim bestehenden `selli.placesApiKey`.
 
@@ -43,8 +60,9 @@ Google Cloud Console die **Places API (New)** und ist auf Android-Apps beschrän
 Schlüssel-Restriktion müssen Paketname und Signatur-Fingerabdruck eingetragen sein:
 
 - Paketname: `com.prehmus.selli`
-- SHA-1 des verwendeten Keystores — für Debug-Builds:
-  `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`
+- SHA-1 des verwendeten Keystores — für Debug-Builds den konfigurierten Pfad aus
+  `selli.signing.storeFile` einsetzen:
+  `keytool -list -v -keystore <konfigurierter-keystore-pfad> -alias <selli.signing.keyAlias> -storepass <selli.signing.storePassword>`
 
 Ein Release-Build mit anderem Keystore braucht einen **zusätzlichen** Eintrag in derselben
 Restriktion, sonst antwortet die API mit `403 PERMISSION_DENIED`. Die App liest Paketname und

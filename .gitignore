@@ -10,6 +10,8 @@ captures/
 .cxx/
 *.apk
 *.aab
+*.keystore
+*.jks
 
 # Enthält vertrauliche Werte (u.a. den ICS-Feed-Link mit Zugriffstoken) — niemals committen.
 secrets.properties

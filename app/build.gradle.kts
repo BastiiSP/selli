@@ -19,9 +19,38 @@ fun buildConfigStringProperty(name: String): String {
     return "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 }
 
+val selliDebugStorePath = localProperties.getProperty("selli.signing.storeFile")
+    ?.takeIf(String::isNotBlank)
+    ?.let { path ->
+        if (path.startsWith("~/")) {
+            System.getProperty("user.home") + path.substring(1)
+        } else {
+            path
+        }
+    }
+val selliDebugStoreFile = selliDebugStorePath?.let(::file)
+
+if (selliDebugStorePath != null && selliDebugStoreFile?.isFile != true) {
+    throw GradleException(
+        "Der konfigurierte Selli-Debug-Keystore fehlt: $selliDebugStorePath. " +
+            "Prüfe das Backup und die Hinweise im README.md unter „Signatur“.",
+    )
+}
+
 android {
     namespace = "com.prehmus.selli"
     compileSdk = 35
+
+    signingConfigs {
+        if (selliDebugStoreFile != null) {
+            create("selliDebug") {
+                storeFile = selliDebugStoreFile
+                storePassword = localProperties.getProperty("selli.signing.storePassword")
+                keyAlias = localProperties.getProperty("selli.signing.keyAlias")
+                keyPassword = localProperties.getProperty("selli.signing.keyPassword")
+            }
+        }
+    }
 
     defaultConfig {
         applicationId = "com.prehmus.selli"
@@ -68,6 +97,11 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            if (selliDebugStoreFile != null) {
+                signingConfig = signingConfigs.getByName("selliDebug")
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
