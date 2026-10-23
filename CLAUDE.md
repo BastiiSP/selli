@@ -1,111 +1,62 @@
-# CLAUDE.md – Selli
+# Selli – Projektanweisungen
 
-Projektkontext für Claude Code in diesem Repository. Pendant zu `AGENTS.md` (dort die Konventionen für Codex).
+Native Android-App für zwei verbundene Konten: Kalender zusammenführen, gemeinsame Termine, Standort, Kosten und Ideen. Kotlin und Jetpack Compose; Widget via Jetpack Glance. Google Calendar und lesende ICS-/Webcal-Feeds bleiben Kalenderquellen. Supabase ergänzt Standort, Kosten und Ideen; kein Ersatz für die Kalender-Anbindung. Kalender beim Öffnen aktualisieren; Kalender-Push bleibt ein späteres Vorhaben.
 
-## Projektkontext
+## Zuständigkeiten
 
-Selli ist eine native Android-Kalender-App für Basti und seine Freundin Melanie ("Melli") Spies. Beide leben ca. zwei Autostunden voneinander entfernt (Fernbeziehung) und haben aktuell keinen gemeinsamen Überblick über ihre Termine. Selli führt die relevanten Kalender beider zusammen, ohne bestehende Kalender-Apps zu ersetzen.
+Jede Datei hat genau einen Owner; keine Datei zwischen den Werkzeugen aufteilen.
+- **Claude Code:** `ui/`, Compose, Layout, Design, Assets, Glance-UI und Verdrahtung der UI zur Logik.
+- **Codex:** `data/`, `domain/`, Modelle, API-Clients, ICS-Parsing, Merge-/Sync-/Freizeitlogik, Tests, Gradle, README. Codex-Tasks über `codex:rescue` bzw. eingerichtete Übergabe delegieren; persönlichen Skill `codex-modellwahl` anwenden, Modell/Effort ausdrücklich festlegen und nach Start prüfen.
+- Berechnung gehört zu Codex, Darstellung zu Claude. Vor Änderungen vorhandenes LSP-Tool zur Strukturprüfung nutzen; fehlenden Zugriff ausweisen.
+- UI verwendet State-Hoisting und unidirektionalen Datenfluss; Business-Logik bleibt in `domain`/`data`, dort keine UI-Framework-Imports. Kotlin-Stil ktlint-kompatibel.
+- Vorhandene Design-Tokens und Assets verwenden; Codex trifft keine eigenen Designentscheidungen.
 
-- **Stack:** Kotlin + Jetpack Compose, Widget (v2) via Jetpack Glance
-- **Backend nur fürs Standort-Feature:** Kalender-Daten laufen weiterhin ohne eigenes Backend direkt gegen externe Dienste; seit 26.08.2026 gibt es zusätzlich eine Supabase-Instanz (Free Tier) **ausschließlich** für die Live-Standorte der beiden Personen.
-- Die App spricht direkt mit externen Diensten:
-  - Google Calendar API für Bastis und Mellis privaten Kalender (inkl. automatischem ACL-Insert-Call für gegenseitige "Details anzeigen"-Freigabe)
-  - Ein veröffentlichter ICS-/Webcal-Feed für Bastis MS365-Arbeitskalender (read-only, periodisch abgerufen und geparst)
-- Push/Realtime-Sync ist bewusst auf später verschoben – MVP arbeitet mit Refresh beim App-Öffnen
+## Verbindliches Design
 
-## Owner-Regeln (Claude ↔ Codex)
+- Warm, verspielt und persönlich; Outlook-artiges Kalender-Grid mit Tagesdetail, runden Zellen/Karten, weichen Schatten und Personenfarben als Pills.
+- Personenfarben: Lila `#7E58B4` und Grün `#3E8A5C` im Light Theme, `#B49BD9` und `#7FC79A` im Dark Theme; Soft-Töne aus `ui/theme/Color.kt`.
+- Gemeinsame Termine bekommen `selliGradient()`; Lila-Grün-Verlauf auch für Header, Icon und Splash.
+- Dark Mode folgt dem System ohne manuellen Umschalter; abgestimmte entsättigte Varianten statt Invertierung.
+- Nunito Regular/SemiBold/Bold/ExtraBold liegt statisch in `res/font/` für Titel/UI; Fließtext bleibt Systemschrift. Keine Netz-/Play-Services-Abhängigkeit der Schriften.
+- Eigenständiges rundliches, dunkles Maskottchen mit großen Augen, von Rußmännchen-Ästhetik inspiriert; keine Kopie. Bestehende WebP-Posen in `res/drawable-nodpi/` für Idle, Laden, Leerzustand, Feiern, Nachdenken und Reise verwenden.
+- Wir-Zeit-Szene: Reise entlang des Pfads von Erstellung bis Beginn; am Termin feiern, ohne Termin nachdenken. `domain/countdown/WirZeitCountdown.kt` liefert Logik, `ui/home/WirZeitJourneyScene.kt` Darstellung.
+- Text/Icons auf `selliGradient()`/`personColor()` immer über `onAccentColor()`; Szene nur auf Akzentfläche, auf warmem Hintergrund unlesbar.
+- River Spirit ist eine langsam driftende Begleitfigur des Homescreens, kein Maskottchen-Ersatz. Bestehende gezeichnete Avatare mit Personenfarben-Ring verwenden, keine Fotos.
+- Schmaler globaler Verlauf-Header mit Wortmarke/Profil-Avatar und schmale Navigation `Kalender | Ideen | Wir | Kosten | Standort`. `Wir` ist Startziel. Profil/Einstellungen als eigene Vollbildroute über dem Gerüst.
+- Kalender-Zeitraumtitel, Blättern und Refresh in `CalendarPeriodBar`. Entfernte Mood-Icon-UI nicht wieder einführen; gespeicherte `LayoutPreferences.headerCollapsed` erhalten.
+- Homescreen: Reise-Szene, River Spirit, maximal fünf nächste gemeinsame Termine; Leerzustand mit nachdenkender Pose.
+- Profil enthält eigenes/verbundenes Google-Konto, „Ausgeblendet & angepasst“ und „Konto wechseln“.
+- Standortkarte: Personenfarben/Avatare, Pin-Anker 0,92, systemabhängige warme Kartenstile ohne POI-/Transit-Labels. Bewegung linear über 1,2 s statt Easing; Frische statt Distanzanzeige. Kein Standort-Ein/Aus-Schalter.
+- Illustrationen einmalig während der Entwicklung erzeugen und statisch bündeln; keine Bildgenerierung oder Keys zur Laufzeit.
+- App-Icon kann bei Launcher-Masken an Rändern knapp sein; bekannte Einschränkung, kein pauschaler Blocker.
 
-Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und Codex aufteilen.
+## Daten- und Funktionsgrenzen
 
-- **Claude (dieses Projekt):** Jetpack Compose UI, Layout, visuelle Umsetzung des Designkonzepts (siehe unten), Glance-Widget-UI, Verdrahtung von UI zu der von Codex bereitgestellten Logik
-- **Codex:** reine Logik-Module, Datenmodelle, API-Clients (Google Calendar API, ICS-Parsing), Merge-/Sync-Logik zwischen den Kalenderquellen, Freizeit-Abgleich-Logik, Tests, Gradle-/Build-Konfiguration, README. Tasks mit Owner Codex werden über den `codex:rescue`-Skill delegiert.
-- Faustregel: Was das Ergebnis **berechnet** (z. B. ob beide frei sind), ist Codex. Wie das Ergebnis **dargestellt** wird (z. B. das Maskottchen freut sich sichtbar), ist Claude.
-- Vor Änderungen: LSP-Tool nutzen, um die bestehende Codestruktur zu verstehen.
+- Google-ACL für gegenseitige Detailfreigabe erhalten; Kalenderquellen unabhängig behandeln, Fehler sichtbar anzeigen.
+- Wir-Zeit-Kategoriewechsel setzt/entfernt den verbundenen Google-Teilnehmer.
+- Entfernen unterscheidet eigenes echtes Löschen, eigene Wir-Zeit mit Storno beim Partner, Partner-Wir-Zeit mit Lösch-Anfrage und übrige lokale Ausblendung. `selli:deleteRequestedBy` in `extendedProperties.shared` nutzt bestehende Benachrichtigungen. Schreibrecht auf eingeladener Kopie nicht unterstellen; Fallback erhalten und am Gerät prüfen.
+- Organisator auswerten: Einladungen nicht pauschal als `GOOGLE_OWN` behandeln. Sehr alte Einträge ohne Organisator bleiben eine dokumentierte Einschränkung; kein behaupteter iCalUID-Fallback.
+- ICS MONTHLY/YEARLY erscheint bislang nur am Startdatum; fehlendes `created` hält die Reise-Figur am Anfang. Nicht als vollständig gelöst darstellen.
+- Standort: Google-Login additiv per ID-Token mit selbst erneuernder Supabase-Sitzung koppeln. Eine Position pro Konto via Upsert, Realtime mit 60-s-Polling-Fallback; Allowlist/RLS begrenzt auf die zwei Konten.
+- Tracking adaptiv: Stillstand 5 min/WLAN/150-m-Filter, Bewegung 30 s/GPS/gebündelt; kein Dauer-GPS.
+- Vor Datenänderungen Migrationen und vorhandene Specs/Pläne unter `docs/superpowers/` lesen; Standort-Inbetriebnahme unter `docs/runbooks/supabase-scharfstellen.md`.
+- Kosten/Ideen erhalten: gemeinsame Ausgaben 50/50, Settlement-Gruppierung, Ordner mit abhakbaren Punkten und Linkvorschau. Vor Änderungen die bestehenden Specs/Pläne und Implementierung prüfen; historische Fehlerlisten nicht als aktuellen Zustand übernehmen. `loadSettlements()`, fehlerweiterreichendes `settle()` und Kosten-/Ideen-Deep-Links sind im Code vorhanden. Gerätetests mit beiden Konten sowie RLS/Grants, Zeitstempel, Web-Parsing, Benachrichtigungen, Reise-Fortschritt und Lösch-Anfrage nur bei tatsächlicher Durchführung als bestätigt ausweisen.
 
-## Designkonzept (Quelle der Wahrheit für UI-Arbeit)
+## Geheimnisse, Build und Übergabe
 
-*Vollständig erarbeitet und von Basti final bestätigt am 18.07.2026. Das ausführliche Original liegt in Bastis privatem Obsidian-Vault (`02 Projekte/Selli.md`) – dieser Abschnitt ist die für Claude Code direkt nutzbare Kopie, damit kein Vault-Zugriff nötig ist.*
+- Öffentliches Repository: keine persönlichen Hintergründe, echten Konten/Termine, privaten Dokumentverweise oder Zugangsdaten aufnehmen.
+- Secrets nur in ignorierter `local.properties`, über `BuildConfig` bereitstellen. Keys: `selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`. Keine Werte in Code/Anweisungen.
+- `./gradlew assembleDebug` und `./gradlew testDebugUnitTest`.
+- Nach abgeschlossener Entwicklungsaufgabe mit grünem Build/Tests `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Root kopieren und alte Fassung dort ersetzen. Einziger Übergabeort, kein Desktop und keine weiteren Kopien; `*.apk` bleibt ignoriert. Reine Anweisungspflege erfordert keinen neuen APK-Build.
 
-**Grundstimmung:** Warm & verspielt, persönlich statt generisch. Selli soll sich wie eine kleine gemeinsame Welt anfühlen statt wie ein Business-Tool – auch wenn die Bedienlogik bewusst vom bewährten Outlook-Grid übernommen wird.
+## Pflege dieses Dateipaars
 
-**Farbsystem:**
-- Personenfarben: **Lila** (Melli) und **Grün** (Basti) – jeder Termin trägt die Farbe seiner Person als runde Pill/Badge statt eckigem Balken. Finale Werte in `ui/theme/Color.kt`: `MelliPurple = #7E58B4`, `BastiGreen = #3E8A5C` (Light, gegenüber dem ersten Platzhalter leicht abgedunkelt für 4,5:1-Kontrast bei weißem Pill-Text), `MelliPurpleDark = #B49BD9`, `BastiGreenDark = #7FC79A` (Dark), dazu sanfte `*Soft`-Containertöne für Termin-Karten.
-- Gemeinsam erstellte Termine bekommen einen sanften Lila-Grün-Verlauf als eigene dritte Kennung (`selliGradient()` in `Color.kt`)
-- Lila-Grün-Gradient zusätzlich als App-weites Branding-Element (Header, App-Icon-Hintergrund, Splash Screen)
-- Dark Mode folgt automatisch dem System-Theme (kein manueller Umschalter, siehe `SelliTheme` in `ui/theme/Theme.kt`); beide Farben bekommen abgestimmte, entsättigte/gedimmte Dark-Mode-Varianten statt einfacher Invertierung
+Direkte aktuelle Nutzeraufträge haben Vorrang. Vor Regeländerungen beide Dateien lesen und Unterschiede inhaltlich zusammenführen; gültige Regeln erhalten. AGENTS.md und CLAUDE.md unmittelbar gemeinsam ändern und danach mit `cmp` auf Bytegleichheit prüfen. Anbieterunterschiede ausdrücklich kennzeichnen und in beiden Dateien führen. Codex lädt AGENTS.md; Claude Code lädt bei diesem Paar CLAUDE.md.
 
-**Typografie:** Rundliche, freundliche Schrift – **umgesetzt**: Nunito (Regular/SemiBold/Bold/ExtraBold), statisch gebündelt unter `res/font/`, keine Netz-/Play-Services-Abhängigkeit. Läuft in Überschriften/Titeln/UI-Elementen (`ui/theme/Type.kt`); Fließtext bleibt bewusst Systemschrift für gute Lesbarkeit bei längeren Inhalten.
+## Abschluss: Claudian-Update
 
-**Maskottchen:** Eigenständiges, an Ghiblis Rußmännchen-Ästhetik *angelehntes* (nicht kopiertes) kleines Wesen – rundlich, dunkel, große Kulleraugen, tapsig-niedlich. Finale Illustrationen (nicht mehr Platzhalter) liegen als WebP unter `res/drawable-nodpi/`: `mascot_idle`, `mascot_loading`, `mascot_empty_state`, `mascot_celebrating`, `mascot_pondering`, `mascot_traveling`, `ic_launcher_foreground_art` (App-Icon-Vordergrund). Einsatzorte:
-- App-Icon (`ic_launcher_foreground_art`, vor dem Lila-Grün-Gradient aus `ic_launcher_background.xml`) – **bekannte Einschränkung:** füllt die Fläche recht vollständig, bei manchen Launcher-Masken (Kreis/Squircle) könnten Ränder leicht abgeschnitten werden; Polish-Punkt, kein Blocker
-- Ladeanimation beim Kalender-Sync ("sammelt" Termine ein, `mascot_loading`)
-- Leerzustand ("keine Termine heute", `mascot_empty_state`)
-- **Wir-Zeit-Countdown auf dem Homescreen-Tab** (seit 26.08.2026 dort; vorher im Kalender-Header, davor ein reagierendes Mood-Icon): animierte Wanderweg-Szene auf einer Lila-Grün-Fläche. `mascot_traveling` läuft entlang eines Pfads auf ein Ziel-Symbol zu (Fortschritt = Zeit seit Termin-Erstellung bis Termin-Start), `mascot_celebrating` am Tag der Wir-Zeit, `mascot_pondering` wenn keine geplant ist. Logik in `domain/countdown/WirZeitCountdown.kt` (Codex), Szene in `ui/home/WirZeitJourneyScene.kt` (Claude). **Wichtig:** die Szene zeichnet durchgehend mit `onAccentColor()` und gehört damit zwingend auf eine `selliGradient()`-/`personColor()`-Fläche – auf warmem Hintergrund ist sie unlesbar. Spec/Plan: `docs/superpowers/specs/2026-08-05-wir-zeit-countdown-design.md` / `docs/superpowers/plans/2026-08-07-wir-zeit-countdown.md`.
-- **River Spirit** (`spirit_river.webp`) – eigenständige, an Ghibli angelehnte Begleitfigur des Homescreens (kein Maskottchen-Ersatz): driftet langsam über der Wanderweg-Szene, `ui/home/RiverSpirit.kt`.
-
-**Avatare:** Illustrierte Profildarstellungen von Basti und Melli im selben gezeichneten Stil wie das Maskottchen (kein Foto) – **umgesetzt**, liegen als `avatar_basti.webp` / `avatar_melli.webp` unter `res/drawable-nodpi/`, mit Personenfarben-Ring in der UI kombiniert.
-
-**App-Grundgerüst (seit 26.08.2026):** Ein schmaler, auf jedem Bildschirm sichtbarer Header (`ui/shell/SelliTopBar.kt`: Lila-Grün-Verlauf, Wortmarke, eigener Avatar als Zugang zum Profilbereich) und eine schmale Bottom-Navigation mit drei gleichwertigen Zielen (`ui/shell/SelliBottomBar.kt`): **Kalender | Wir | Standort**. „Wir" sitzt in der Mitte und ist das Startziel. Das Gerüst liegt in `ui/shell/` (`SelliShell.kt` = Header + `NavHost` + Bottom-Navigation, `SelliDestination.kt` = Routen).
-
-**Kalender-Tab:** Struktur und Bedienlogik wie im MS365-Outlook-Kalender (Grid-Ansicht mit Tagesdetail darunter) – bewusst übernommen, weil bewährt und beiden vertraut. Visuell "warm eingekleidet": abgerundete Zellen/Tageskarten statt eckiger Kästen, weiche Schatten statt harter Linien, Personenfarben als Pills, durchgängig die rundliche Schrift. Zeitraumtitel, Blätter-Pfeile und manuelles Aktualisieren sitzen in `ui/calendar/CalendarPeriodBar.kt`. Das frühere separate, stimmungsreaktive Mood-Icon (`CalendarMergeService.isBothFree(day)`) wurde entfernt – `isBothFree` existiert im Code nur noch für Tests, hat keinen UI-Aufrufer mehr.
-
-**Wir-Tab (Homescreen, `ui/home/HomeScreen.kt`):** die Wanderweg-Szene als große Gradient-Hero-Karte mit dem River Spirit, darunter „Nächste gemeinsame Termine" (max. 5, aus `CalendarUiState.upcomingWirZeitEvents`). Leerzustand mit `mascot_pondering`.
-
-**Profil & Einstellungen (`ui/settings/SettingsScreen.kt`):** Vollbild-Route über dem Gerüst, erreichbar über den Avatar im Header. Enthält Profilkarte, verknüpftes Google-Konto (eigenes + Partner), „Ausgeblendet & angepasst" und „Konto wechseln" – die letzten beiden saßen früher im Überlaufmenü des Kalender-Headers, das mit `MascotHeader.kt` entfallen ist.
-
-**Standort-Tab (`ui/location/`):** Karte mit der Live-Position beider Personen. Jede Position ist ein Kartenmarker in der Personenfarbe mit dem gezeichneten Avatar-Gesicht (`location_pin_basti.webp` / `location_pin_melli.webp`, Anker auf der Pin-Spitze bei 0,92 statt 1,0 – darunter sitzt der Schlagschatten). Kartenstile in `res/raw/map_style_selli.json` / `map_style_selli_night.json` (warme, gedämpfte Töne, POI-/Transit-Labels aus, folgt dem System-Theme). Markerbewegung wird linear über 1,2 s animiert – eine Autofahrt verläuft gleichmäßig, Easing würde ein Bremsen vortäuschen. Statt einer Entfernungsanzeige steht unter jedem Marker die Frische („gerade jetzt" / „vor N Min." / „vor längerer Zeit"). **Bewusst nicht enthalten:** kein Ein/Aus-Schalter für die Standortfreigabe, keine Distanzanzeige.
-
-**Asset-Produktion:** Alle illustrierten Assets (Maskottchen-Posen, Avatare, App-Icon) werden über OpenAI-Bildgenerierung **einmalig während der Entwicklung** erzeugt und als statische Bilddateien ins Projekt gepackt (z. B. unter `res/drawable/`). Kein API-Key, keine Laufzeitkosten, keine Internetabhängigkeit für dieses Feature selbst.
-
-## Coding-Konventionen
-
-- Compose-Best-Practices: State-Hoisting, unidirektionaler Datenfluss, keine Business-Logik in Composables (die liegt bei Codex in `domain`/`data`)
-- Klare Modul-/Package-Trennung:
-  - `data/` – API-Clients, Repositories (Codex-Territorium)
-  - `domain/` – Merge-Logik, Freizeit-Abgleich, sonstige Geschäftslogik (Codex-Territorium)
-  - `ui/` – Compose-Screens, Theme, Components (Claude-Territorium)
-- **Keine Secrets im Code.** Der ICS-Link (enthält Zugriffstoken) und die Google-OAuth-Client-ID gehören ausschließlich in lokale, nicht versionierte `local.properties` (`selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`) und werden als `BuildConfig`-Felder bereitgestellt – siehe README. Nie committen.
-
-## Build & Test
-
-- `./gradlew assembleDebug` – Debug-Build
-- `./gradlew testDebugUnitTest` – Unit-Tests, insbesondere für von Codex gelieferte Logik-Module
-- **Nach jeder abgeschlossenen Aufgabe** (Build + Tests grün): Ergebnis von `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Projekt-Root kopieren (`cp app/build/outputs/apk/debug/app-debug.apk selli.apk`) und die alte Version dabei überschreiben. Das ist der feste, einzige Ablageort für die Weitergabe an Basti/Melli (z. B. per WhatsApp) – kein Desktop, keine weiteren Kopien an anderer Stelle. `selli.apk` ist über `.gitignore` (`*.apk`) ausgeschlossen, landet also nie im Repo.
-
-## Bekannter Stand (Stand 26.08.2026)
-
-MVP-Kern ist fertig und seitdem in vielen Runden gewachsen: Google-Kalender-Anbindung inkl. automatischer ACL-Freigabe (für beide Personen, inkl. Mellis eigenem zweiten Arbeitskalender-Feed), ICS-Arbeitskalender mit eigenem RFC-5545-Parser, Zusammenführungslogik, komplette Kalender-UI (Monat/Woche/Tag mit Wisch-Navigation), Homescreen-Widget in drei Größenstufen, finale Illustrationen (Maskottchen-Posen, Avatare mit echter Ähnlichkeit) eingebunden. Kalenderquellen sind fehler-isoliert (eigener Google-Kalender, Partner-Google-Kalender, beide ICS-Feeds scheitern unabhängig, sichtbare Fehler-Banner statt stillem Verschlucken).
-
-**Seitdem ergänzt** (Details/Historie: Bastis Obsidian-Vault `02 Projekte/Selli.md`, technische Specs/Pläne unter `docs/superpowers/`):
-- **Sitzung merken, lokale Ausblendungen/Anpassungen, Serien anlegen** (ursprünglicher "Alltagstauglichkeits-Block") — Termin antippen → Aktionen-Sheet, Verwaltung über „Ausgeblendet & angepasst" (seit 26.08.2026 im Profil-/Einstellungsbereich, vorher im Header-Menü).
-- **Termin-Kategorien** (Arbeit/Privat/Wir-Zeit) + Freie-Zeit-Anzeige, später durch den Wir-Zeit-Countdown ersetzt (siehe Maskottchen-Abschnitt).
-- **Wir-Zeit synchronisiert automatisch mit Google:** Kategorie-Wechsel zu/von "Wir-Zeit" setzt/entfernt den Partner als Google-Teilnehmer.
-- **Widget-Größenvarianten** (klein/mittel/groß, `SizeMode.Exact`), **Wir-Zeit-Benachrichtigungen** und **Wir-Zeit-Verlauf-Gruppierung** in der Terminliste.
-- **Fünf Anpassungswünsche:** Header/Kalender/Liste-Größenanpassung, Zeitstrahl-Farbe nach Person, Pull-to-Refresh, Feed-Caching/Retry gegen HTTP-429-Sperren, **eigene Termine löschen** (echte Google-Löschung, Vorkommen/Serie).
-- **Mehrtägige Termine** (ganztägig und getimt) inkl. frei/beschäftigt-Entscheidung, **Google-Maps-Ortsanbindung**.
-- **Wir-Zeit-Countdown:** ersetzt die Freie-Zeit-Anzeige im Header und die "nächster freier Slot"-Widget-Zeile — siehe Maskottchen-Abschnitt oben.
-- **Termin entfernen (vereinheitlicht):** Aktionen-Sheet bietet jetzt für jeden Termin eine Entfernen-Option — eigener Termin → echtes Löschen (unverändert), eigene Wir-Zeit → echtes Löschen (storniert automatisch beim Partner), **Wir-Zeit der Partnerin/des Partners → neue Lösch-Anfrage** (Markierung `selli:deleteRequestedBy` in `extendedProperties.shared` + Benachrichtigung über das bestehende Wir-Zeit-System, kein neues Backend), alles andere → weiterhin nur lokales Ausblenden. „Ausgeblendet & angepasst" hat dafür ein Mülleimer-Icon pro Zeile bekommen. Spec/Plan: `docs/superpowers/specs/2026-08-07-termin-entfernen-design.md` / `docs/superpowers/plans/2026-08-07-termin-entfernen.md`.
-- **App-Grundgerüst statt Einzelbildschirm (26.08.2026):** `navigation-compose`, globaler Header, Bottom-Navigation mit drei Zielen, eigener Homescreen, neuer Profil-/Einstellungsbereich. `ui/calendar/MascotHeader.kt` (754 Zeilen, trug fünf Dinge gleichzeitig) ist dabei aufgelöst worden – die Wanderweg-Szene ist nach `ui/home/`, Wortmarke/Avatare in den globalen Header, Zeitraumnavigation in `CalendarPeriodBar`, die Menüeinträge in die Einstellungen gewandert. `LayoutPreferences.headerCollapsed` hat seitdem keinen Leser mehr (bleibt erhalten, damit gespeicherte Gerätewerte nicht ins Leere laufen). Spec/Plan: `docs/superpowers/specs/2026-08-26-grundgeruest-standort-design.md` / `docs/superpowers/plans/2026-08-26-app-grundgeruest.md`.
-- **Standort-Feature mit Supabase (26.08.2026):** erstes eigenes Backend, ausschließlich für Positionen. Die bestehende Google-Anmeldung bleibt Quelle der Wahrheit und wird nur **ergänzt**: `GoogleIdTokenProvider` (additiv in `GoogleCalendarDataRepository`) gibt das rohe Google-ID-Token heraus, mit dem sich Supabase **einmalig** per `signInWithIdToken` koppelt – danach führt supabase-kt eine eigene, selbst erneuerte Sitzung. Eine Zeile pro Person in `public.locations` per Upsert, Realtime über `postgres_changes`, 60-s-Polling-Fallback. Zugriff ist über eine von Hand befüllte Allowlist (`public.selli_members` + `is_selli_member()`) auf genau zwei Konten begrenzt. Migration liegt versioniert in `supabase/migrations/`. Tracking über einen Foreground-Service mit **adaptiver Taktung** (`domain/location/LocationCadence.kt`): Stillstand 5 min / WLAN-Fixes / 150-m-Filter (~0,5 %/h), Bewegung 30 s / GPS / gebündelt (~2–4 %/h) – Vorbild ist Googles Standortfreigabe, nicht WhatsApps Dauer-GPS. Spec/Plan: `docs/superpowers/specs/2026-08-26-grundgeruest-standort-design.md` / `docs/superpowers/plans/2026-08-26-standort-feature.md`.
-- **Fix: `GOOGLE_OWN`-Fehltagging bei Einladungen.** `fetchEvents()` markierte bislang jeden Termin aus dem eigenen Kalender-Fetch als `GOOGLE_OWN`, auch wenn man nur eingeladen (nicht Organisator) war — führte zu doppelt angezeigten Partner-Wir-Zeit-Terminen und einem irreführenden "Endgültig löschen"-Button (löscht bei einem fremden Termin nach Google-Semantik nur die eigene Teilnahme, nicht den ganzen Termin). Behoben über `Event.isOrganizedByPartner(partnerEmail)`, das erstmals das Google-Feld `organizer`/`organizer.self` auswertet.
-
-**303 Unit-Tests grün** (Stand 26.08.2026). Bekannte, bewusst in Kauf genommene Einschränkungen (kein Bug):
-- MONTHLY/YEARLY-RRULEs aus ICS-Feeds erscheinen nur als Einzeltermin am Startdatum
-- ICS-Termine haben kein `created`-Datum → im Wir-Zeit-Countdown-Wanderweg steht das Maskottchen dort dauerhaft am Weganfang
-- Sehr alte Google-Termine ganz ohne `organizer`-Feld werden vom Dopplungs-Fix nicht erfasst (kein Fallback über `iCalUID`)
-- App-Icon-Vordergrund evtl. zu randvoll für manche Launcher-Masken (siehe Designkonzept oben)
-- Merkregel: Text/Icons auf `selliGradient()`- oder `personColor()`-Flächen nie hart `Color.White` geben, sondern `onAccentColor()` verwenden (Dark-Mode-Kontrast)
-
-**Standort-Feature: scharfgestellt und am Gerät bestätigt (14.09.2026).** Supabase-Projekt "selli" (`pfccqmnrtgkpbciyjhah`, `eu-central-1`) ist aktiv, `public.selli_members`/`public.is_selli_member()` existieren und sind mit beiden echten Konten gefüllt, Google-Auth-Provider ist aktiv, `local.properties` ist vollständig. Kompletter Gerätetest bei Basti erfolgreich (Login, Standort-Upload, Karte). Details/Historie: `docs/runbooks/supabase-scharfstellen.md`.
-
-**Kostentracking + "Ideen" implementiert (15.09.2026).** Beide Features vollständig umgesetzt über `docs/superpowers/plans/2026-09-14-kostentracking-und-ideen.md` (19 Tasks), Supabase-Tabellen `expenses`/`settlements`/`note_folders`/`note_items` liegen auf derselben Instanz wie `locations` und sind seit 15.09.2026 live (Migrationen ausgeführt, RLS/Grants verifiziert). **333 Unit-Tests grün.** Volle Historie inkl. aller Design-Entscheidungen in Bastis Obsidian-Vault (`02 Projekte/Selli.md`). **Noch nicht am Gerät getestet:** Wirksamkeit von RLS/Grants für Kosten/Ideen, PostgREST-Zeitstempelformat, ob Jsoup ohne User-Agent von gängigen Rezept-/Social-Seiten bedient wird oder mit 403 abgewiesen wird, Partner-Benachrichtigungen mit zwei echten Konten. **Bekannte, bewusst offene Lücken:** Ausgeglichen-Trennzeile ("— Ausgeglichen am DD.MM., Saldo war X € —") in der Ausgabenliste nicht umgesetzt (`settlements` wird geschrieben, aber nie gelesen — im freigegebenen Plan keine Repository-Methode dafür vorgesehen); Deep-Link der Benachrichtigungen (`PartnerActivityNotifier` schreibt die Extras schon, `MainActivity.toSelliDeepLink()` liest sie noch nicht); Datum im Ausgaben-Bearbeiten-Sheet nicht änderbar; `settle()` meldet offline fälschlich Erfolg ohne Wirkung.
-
-**Ausstehende Gerätetests** (funktional/unabhängig verifiziert, aber noch nicht am echten Gerät mit beiden echten Konten bestätigt): Wir-Zeit-Countdown-Fortschrittsposition, Termin-entfernen-Lösch-Anfrage inkl. der offenen technischen Kernfrage, ob ein eingeladener Teilnehmer `extendedProperties.shared` auf seiner eigenen Kopie schreiben darf (Fallback ist getestet und greift, falls nicht), Dopplungs-Fix.
-
-## Claudian-Update-Format
-
-Am Ende eines Handover-Prompts (bzw. nach jeder erledigten Aufgabe) dieses Format ausgeben:
-```
+Nach jeder erledigten Implementierungsaufgabe dieses Format mit tatsächlichen Ergebnissen ausgeben; es ersetzt keine unabhängige Prüfung:
+```text
 ## Claudian-Update – [Datum]
 
 ### Implementiert
@@ -120,4 +71,3 @@ Am Ende eines Handover-Prompts (bzw. nach jeder erledigten Aufgabe) dieses Forma
 ### Technische Notizen
 - [Wichtige Entscheidungen, neue Pakete, IDs etc.]
 ```
-Basti kopiert dieses Update zu Claudian, der die Projektdokumentation im Vault (`02 Projekte/Selli.md`) damit pflegt.

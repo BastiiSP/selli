@@ -1,41 +1,73 @@
-# AGENTS.md – Selli
+# Selli – Projektanweisungen
 
-Codex-Pendant zur `CLAUDE.md` dieses Projekts. Gilt für alle Aufgaben, die Codex in diesem Repository übernimmt.
+Native Android-App für zwei verbundene Konten: Kalender zusammenführen, gemeinsame Termine, Standort, Kosten und Ideen. Kotlin und Jetpack Compose; Widget via Jetpack Glance. Google Calendar und lesende ICS-/Webcal-Feeds bleiben Kalenderquellen. Supabase ergänzt Standort, Kosten und Ideen; kein Ersatz für die Kalender-Anbindung. Kalender beim Öffnen aktualisieren; Kalender-Push bleibt ein späteres Vorhaben.
 
-## Projektkontext
+## Zuständigkeiten
 
-Selli ist eine native Android-Kalender-App für Basti und seine Freundin Melanie ("Melli") Spies. Beide leben ca. zwei Autostunden voneinander entfernt (Fernbeziehung) und haben aktuell keinen gemeinsamen Überblick über ihre Termine. Selli führt die relevanten Kalender beider zusammen, ohne bestehende Kalender-Apps zu ersetzen.
+Jede Datei hat genau einen Owner; keine Datei zwischen den Werkzeugen aufteilen.
+- **Claude Code:** `ui/`, Compose, Layout, Design, Assets, Glance-UI und Verdrahtung der UI zur Logik.
+- **Codex:** `data/`, `domain/`, Modelle, API-Clients, ICS-Parsing, Merge-/Sync-/Freizeitlogik, Tests, Gradle, README. Codex-Tasks über `codex:rescue` bzw. eingerichtete Übergabe delegieren; persönlichen Skill `codex-modellwahl` anwenden, Modell/Effort ausdrücklich festlegen und nach Start prüfen.
+- Berechnung gehört zu Codex, Darstellung zu Claude. Vor Änderungen vorhandenes LSP-Tool zur Strukturprüfung nutzen; fehlenden Zugriff ausweisen.
+- UI verwendet State-Hoisting und unidirektionalen Datenfluss; Business-Logik bleibt in `domain`/`data`, dort keine UI-Framework-Imports. Kotlin-Stil ktlint-kompatibel.
+- Vorhandene Design-Tokens und Assets verwenden; Codex trifft keine eigenen Designentscheidungen.
 
-- **Stack:** Kotlin + Jetpack Compose, Widget (v2) via Jetpack Glance
-- **Kein eigenes Backend** – die App spricht direkt mit externen Diensten:
-  - Google Calendar API für Bastis und Mellis privaten Kalender (inkl. automatischem ACL-Insert-Call für gegenseitige ["Details anzeigen"-Freigabe])
-  - Ein veröffentlichter ICS-/Webcal-Feed für Bastis MS365-Arbeitskalender (read-only, periodisch abgerufen und geparst)
-- Push/Realtime-Sync ist bewusst auf später verschoben – MVP arbeitet mit Refresh beim App-Öffnen
+## Verbindliches Design
 
-## Owner-Regeln (Claude ↔ Codex)
+- Warm, verspielt und persönlich; Outlook-artiges Kalender-Grid mit Tagesdetail, runden Zellen/Karten, weichen Schatten und Personenfarben als Pills.
+- Personenfarben: Lila `#7E58B4` und Grün `#3E8A5C` im Light Theme, `#B49BD9` und `#7FC79A` im Dark Theme; Soft-Töne aus `ui/theme/Color.kt`.
+- Gemeinsame Termine bekommen `selliGradient()`; Lila-Grün-Verlauf auch für Header, Icon und Splash.
+- Dark Mode folgt dem System ohne manuellen Umschalter; abgestimmte entsättigte Varianten statt Invertierung.
+- Nunito Regular/SemiBold/Bold/ExtraBold liegt statisch in `res/font/` für Titel/UI; Fließtext bleibt Systemschrift. Keine Netz-/Play-Services-Abhängigkeit der Schriften.
+- Eigenständiges rundliches, dunkles Maskottchen mit großen Augen, von Rußmännchen-Ästhetik inspiriert; keine Kopie. Bestehende WebP-Posen in `res/drawable-nodpi/` für Idle, Laden, Leerzustand, Feiern, Nachdenken und Reise verwenden.
+- Wir-Zeit-Szene: Reise entlang des Pfads von Erstellung bis Beginn; am Termin feiern, ohne Termin nachdenken. `domain/countdown/WirZeitCountdown.kt` liefert Logik, `ui/home/WirZeitJourneyScene.kt` Darstellung.
+- Text/Icons auf `selliGradient()`/`personColor()` immer über `onAccentColor()`; Szene nur auf Akzentfläche, auf warmem Hintergrund unlesbar.
+- River Spirit ist eine langsam driftende Begleitfigur des Homescreens, kein Maskottchen-Ersatz. Bestehende gezeichnete Avatare mit Personenfarben-Ring verwenden, keine Fotos.
+- Schmaler globaler Verlauf-Header mit Wortmarke/Profil-Avatar und schmale Navigation `Kalender | Ideen | Wir | Kosten | Standort`. `Wir` ist Startziel. Profil/Einstellungen als eigene Vollbildroute über dem Gerüst.
+- Kalender-Zeitraumtitel, Blättern und Refresh in `CalendarPeriodBar`. Entfernte Mood-Icon-UI nicht wieder einführen; gespeicherte `LayoutPreferences.headerCollapsed` erhalten.
+- Homescreen: Reise-Szene, River Spirit, maximal fünf nächste gemeinsame Termine; Leerzustand mit nachdenkender Pose.
+- Profil enthält eigenes/verbundenes Google-Konto, „Ausgeblendet & angepasst“ und „Konto wechseln“.
+- Standortkarte: Personenfarben/Avatare, Pin-Anker 0,92, systemabhängige warme Kartenstile ohne POI-/Transit-Labels. Bewegung linear über 1,2 s statt Easing; Frische statt Distanzanzeige. Kein Standort-Ein/Aus-Schalter.
+- Illustrationen einmalig während der Entwicklung erzeugen und statisch bündeln; keine Bildgenerierung oder Keys zur Laufzeit.
+- App-Icon kann bei Launcher-Masken an Rändern knapp sein; bekannte Einschränkung, kein pauschaler Blocker.
 
-Jede Datei hat **genau einen Owner** – niemals eine Datei zwischen Claude und Codex aufteilen.
+## Daten- und Funktionsgrenzen
 
-- **Codex (dieses Projekt):** reine Logik-Module, Datenmodelle, API-Clients (Google Calendar API, ICS-Parsing), Merge-/Sync-Logik zwischen den Kalenderquellen, Freizeit-Abgleich-Logik (z. B. "sind Basti und Melli an einem Tag beide frei"), Tests, Gradle-/Build-Konfiguration, README
-- **Claude (bleibt bei Claude Code):** Jetpack Compose UI, Layout, visuelle Umsetzung des Designkonzepts (Farben, Typografie, Maskottchen-/Avatar-Assets), Glance-Widget-UI, Verdrahtung von UI zu der von Codex bereitgestellten Logik
-- Faustregel: Was das Ergebnis **berechnet** (z. B. ob beide frei sind), ist Codex. Wie das Ergebnis **dargestellt** wird (z. B. das Maskottchen freut sich sichtbar), ist Claude.
+- Google-ACL für gegenseitige Detailfreigabe erhalten; Kalenderquellen unabhängig behandeln, Fehler sichtbar anzeigen.
+- Wir-Zeit-Kategoriewechsel setzt/entfernt den verbundenen Google-Teilnehmer.
+- Entfernen unterscheidet eigenes echtes Löschen, eigene Wir-Zeit mit Storno beim Partner, Partner-Wir-Zeit mit Lösch-Anfrage und übrige lokale Ausblendung. `selli:deleteRequestedBy` in `extendedProperties.shared` nutzt bestehende Benachrichtigungen. Schreibrecht auf eingeladener Kopie nicht unterstellen; Fallback erhalten und am Gerät prüfen.
+- Organisator auswerten: Einladungen nicht pauschal als `GOOGLE_OWN` behandeln. Sehr alte Einträge ohne Organisator bleiben eine dokumentierte Einschränkung; kein behaupteter iCalUID-Fallback.
+- ICS MONTHLY/YEARLY erscheint bislang nur am Startdatum; fehlendes `created` hält die Reise-Figur am Anfang. Nicht als vollständig gelöst darstellen.
+- Standort: Google-Login additiv per ID-Token mit selbst erneuernder Supabase-Sitzung koppeln. Eine Position pro Konto via Upsert, Realtime mit 60-s-Polling-Fallback; Allowlist/RLS begrenzt auf die zwei Konten.
+- Tracking adaptiv: Stillstand 5 min/WLAN/150-m-Filter, Bewegung 30 s/GPS/gebündelt; kein Dauer-GPS.
+- Vor Datenänderungen Migrationen und vorhandene Specs/Pläne unter `docs/superpowers/` lesen; Standort-Inbetriebnahme unter `docs/runbooks/supabase-scharfstellen.md`.
+- Kosten/Ideen erhalten: gemeinsame Ausgaben 50/50, Settlement-Gruppierung, Ordner mit abhakbaren Punkten und Linkvorschau. Vor Änderungen die bestehenden Specs/Pläne und Implementierung prüfen; historische Fehlerlisten nicht als aktuellen Zustand übernehmen. `loadSettlements()`, fehlerweiterreichendes `settle()` und Kosten-/Ideen-Deep-Links sind im Code vorhanden. Gerätetests mit beiden Konten sowie RLS/Grants, Zeitstempel, Web-Parsing, Benachrichtigungen, Reise-Fortschritt und Lösch-Anfrage nur bei tatsächlicher Durchführung als bestätigt ausweisen.
 
-## Coding-Konventionen
+## Geheimnisse, Build und Übergabe
 
-- Standard Kotlin-Stil (Android-Kotlin-Style-Guide, ktlint-kompatibel)
-- Compose-Best-Practices für UI-nahe Logik, an die Codex zuarbeitet: State-Hoisting, unidirektionaler Datenfluss, keine UI-Frameworks-Importe in `domain`/`data`
-- Klare Modul-/Package-Trennung:
-  - `data/` – API-Clients, Repositories (Google Calendar, ICS)
-  - `domain/` – Merge-Logik, Freizeit-Abgleich, sonstige Geschäftslogik
-  - `ui/` – Compose-Screens, Theme, Components (Claude-Territorium)
-- **Keine Secrets im Code.** Der ICS-Link (enthält Zugriffstoken) und alle API-Keys/Client-IDs gehören ausschließlich in lokale, nicht versionierte Config (z. B. `local.properties`, mit Eintrag in `.gitignore`). Niemals committen.
+- Öffentliches Repository: keine persönlichen Hintergründe, echten Konten/Termine, privaten Dokumentverweise oder Zugangsdaten aufnehmen.
+- Secrets nur in ignorierter `local.properties`, über `BuildConfig` bereitstellen. Keys: `selli.googleServerClientId`, `selli.icsFeedUrl`, `selli.melliIcsFeedUrl`, `selli.placesApiKey`, `selli.supabaseUrl`, `selli.supabaseAnonKey`, `selli.mapsApiKey`. Keine Werte in Code/Anweisungen.
+- `./gradlew assembleDebug` und `./gradlew testDebugUnitTest`.
+- Nach abgeschlossener Entwicklungsaufgabe mit grünem Build/Tests `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Root kopieren und alte Fassung dort ersetzen. Einziger Übergabeort, kein Desktop und keine weiteren Kopien; `*.apk` bleibt ignoriert. Reine Anweisungspflege erfordert keinen neuen APK-Build.
 
-## Build & Test
+## Pflege dieses Dateipaars
 
-- `./gradlew assembleDebug` – Debug-Build
-- `./gradlew testDebugUnitTest` – Unit-Tests
-- **Nach jeder abgeschlossenen Aufgabe** (Build + Tests grün): Ergebnis von `app/build/outputs/apk/debug/app-debug.apk` nach `selli.apk` im Projekt-Root kopieren (`cp app/build/outputs/apk/debug/app-debug.apk selli.apk`) und die alte Version dabei überschreiben. Das ist der feste, einzige Ablageort für die Weitergabe an Basti/Melli (z. B. per WhatsApp) – kein Desktop, keine weiteren Kopien an anderer Stelle. `selli.apk` ist über `.gitignore` (`*.apk`) ausgeschlossen, landet also nie im Repo.
+Direkte aktuelle Nutzeraufträge haben Vorrang. Vor Regeländerungen beide Dateien lesen und Unterschiede inhaltlich zusammenführen; gültige Regeln erhalten. AGENTS.md und CLAUDE.md unmittelbar gemeinsam ändern und danach mit `cmp` auf Bytegleichheit prüfen. Anbieterunterschiede ausdrücklich kennzeichnen und in beiden Dateien führen. Codex lädt AGENTS.md; Claude Code lädt bei diesem Paar CLAUDE.md.
 
-## Design-Referenz
+## Abschluss: Claudian-Update
 
-Das vollständige Designkonzept (Farben, Typografie, Maskottchen, Avatare, Layout-Prinzipien) liegt in Bastis privatem Obsidian-Vault und ist dort die Quelle der Wahrheit – Codex hat darauf keinen Zugriff. Claude legt die konkreten Design-Tokens (Farbwerte, Theme, Assets) im Projekt ab (z. B. `ui/theme/`), sobald das Setup steht. Codex hält sich beim Implementieren an diese bereits vorhandenen Werte, statt eigene Design-Entscheidungen zu treffen.
+Nach jeder erledigten Implementierungsaufgabe dieses Format mit tatsächlichen Ergebnissen ausgeben; es ersetzt keine unabhängige Prüfung:
+```text
+## Claudian-Update – [Datum]
+
+### Implementiert
+- [Was gebaut / geändert wurde]
+
+### Getestet
+- [Was getestet wurde und Ergebnis]
+
+### Offen / Nächster Block
+- [Was als nächstes kommt]
+
+### Technische Notizen
+- [Wichtige Entscheidungen, neue Pakete, IDs etc.]
+```
