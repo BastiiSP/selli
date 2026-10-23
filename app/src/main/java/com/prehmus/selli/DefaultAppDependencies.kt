@@ -8,6 +8,7 @@ import com.prehmus.selli.data.ics.IcsCalendarParser
 import com.prehmus.selli.data.ics.OkHttpIcsCalendarRepository
 import com.prehmus.selli.data.notes.JsoupLinkPreviewFetcher
 import com.prehmus.selli.data.notes.SupabaseNoteRepository
+import com.prehmus.selli.data.location.LiveShareRuntime
 import com.prehmus.selli.data.location.SupabaseLocationRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.places.PlacesAutocompleteRepository
@@ -23,6 +24,7 @@ import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LiveShareController
 import com.prehmus.selli.domain.repository.LocationRepository
 import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
@@ -114,6 +116,11 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
         ownPerson = { ownPerson.get() },
         logger = AndroidCalendarLogger,
     )
+
+    // Prozessweit eine Instanz: Standortdienst, Benachrichtigungsaktion und UI teilen sich
+    // denselben Freigabe-Zustand.
+    override val liveShareController: LiveShareController =
+        LiveShareRuntime.controller(activity.applicationContext)
 
     // Ohne Supabase-Zugangsdaten bleibt der Standort-Tab bei einem Hinweis, statt eine leere
     // Karte zu zeigen — gleiches Prinzip wie beim fehlenden Places-Schluessel.

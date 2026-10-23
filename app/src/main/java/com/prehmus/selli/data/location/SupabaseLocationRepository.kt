@@ -15,6 +15,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
 import io.github.jan.supabase.realtime.realtime
+import java.time.Instant
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -90,9 +91,17 @@ class SupabaseLocationRepository(
 
     override suspend fun publishOwnLocation(location: PersonLocation): Result<Unit> = client.withSession { supabase ->
         val userId = client.currentUserId() ?: throw CloudSyncException.ReconfirmationRequired()
-        val row = LocationRow.from(location.copy(person = ownPerson()), userId)
+        val row = LocationUpsertRow.from(location.copy(person = ownPerson()), userId)
         supabase.from(LOCATIONS_TABLE).upsert(row) { onConflict = "user_id" }
         Unit
+    }
+
+    override suspend fun publishLiveUntil(liveUntil: Instant?): Result<Boolean> = client.withSession { supabase ->
+        val userId = client.currentUserId() ?: throw CloudSyncException.ReconfirmationRequired()
+        supabase.from(LOCATIONS_TABLE).update({ set("live_until", liveUntil?.toString()) }) {
+            filter { eq("user_id", userId) }
+            select()
+        }.decodeList<LocationRow>().isNotEmpty()
     }
 
     private companion object {

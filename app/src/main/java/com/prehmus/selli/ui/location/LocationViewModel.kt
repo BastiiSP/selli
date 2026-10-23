@@ -3,10 +3,14 @@ package com.prehmus.selli.ui.location
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.prehmus.selli.domain.location.LiveShareDuration
 import com.prehmus.selli.domain.model.LocationFeedEvent
 import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.repository.CloudSessionRepository
+import com.prehmus.selli.domain.repository.LiveShareController
+import com.prehmus.selli.domain.repository.LiveShareStartResult
 import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.OwnLiveShareState
 import com.prehmus.selli.ui.components.CloudIssue
 import com.prehmus.selli.ui.components.toCloudIssue
 import kotlinx.coroutines.Job
@@ -27,11 +31,18 @@ data class LocationUiState(
     val hasLoaded: Boolean = false,
     /** Warum die Karte gerade nicht frisch ist; die zuletzt bekannten Positionen bleiben stehen. */
     val loadIssue: CloudIssue? = null,
+    /** Eigene Live-Freigabe laut lokalem Speicher; ob sie noch läuft, entscheidet die UI mit `now`. */
+    val ownLiveShare: OwnLiveShareState = OwnLiveShareState(),
+    /** Warum der letzte Start einer Live-Freigabe nicht geklappt hat; bis zum Wegklicken sichtbar. */
+    val liveStartProblem: LiveStartProblem? = null,
 )
 
+enum class LiveStartProblem { MISSING_PRECISE_PERMISSION, NOT_CONFIGURED }
+
 /**
- * Beobachtet die Positionen beider Personen. Bewusst schlank: die Erfassung der eigenen
- * Position macht der Foreground-Service, nicht dieses ViewModel — es liest nur mit.
+ * Beobachtet die Positionen beider Personen und die eigene Live-Freigabe. Bewusst schlank: die
+ * Erfassung der eigenen Position und die Live-Taktung macht der Foreground-Service, nicht dieses
+ * ViewModel — es liest mit und reicht Start/Ende an den [LiveShareController] weiter.
  *
  * Der Feed endet nach Fehlern nicht, sondern versucht es selbst weiter und startet nach einer
  * Kontobestätigung neu (siehe LocationRepository.observeLocationFeed). [retry] ist nur die
@@ -40,6 +51,7 @@ data class LocationUiState(
 class LocationViewModel(
     private val repository: LocationRepository,
     private val cloudSession: CloudSessionRepository,
+    private val liveShareController: LiveShareController,
     isConfigured: Boolean,
 ) : ViewModel() {
 
@@ -50,6 +62,28 @@ class LocationViewModel(
 
     init {
         if (isConfigured) observeFeed()
+        viewModelScope.launch {
+            liveShareController.state.collect { state ->
+                _uiState.update { it.copy(ownLiveShare = state) }
+            }
+        }
+    }
+
+    fun startLiveShare(duration: LiveShareDuration) {
+        val problem = when (liveShareController.start(duration)) {
+            is LiveShareStartResult.Started -> null
+            LiveShareStartResult.MissingPreciseLocationPermission -> LiveStartProblem.MISSING_PRECISE_PERMISSION
+            LiveShareStartResult.NotConfigured -> LiveStartProblem.NOT_CONFIGURED
+        }
+        _uiState.update { it.copy(liveStartProblem = problem) }
+    }
+
+    fun stopLiveShare() {
+        liveShareController.stop()
+    }
+
+    fun dismissLiveStartProblem() {
+        _uiState.update { it.copy(liveStartProblem = null) }
     }
 
     fun retry() {
@@ -83,11 +117,12 @@ class LocationViewModel(
         fun factory(
             repository: LocationRepository,
             cloudSession: CloudSessionRepository,
+            liveShareController: LiveShareController,
             isConfigured: Boolean,
         ) = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                LocationViewModel(repository, cloudSession, isConfigured) as T
+                LocationViewModel(repository, cloudSession, liveShareController, isConfigured) as T
         }
     }
 }

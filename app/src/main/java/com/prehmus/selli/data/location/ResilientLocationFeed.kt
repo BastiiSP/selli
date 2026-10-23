@@ -1,10 +1,12 @@
 package com.prehmus.selli.data.location
 
 import com.prehmus.selli.data.supabase.classifyCloudError
+import com.prehmus.selli.domain.location.feedPollingMillis
 import com.prehmus.selli.domain.model.CloudAccessState
 import com.prehmus.selli.domain.model.CloudSyncException
 import com.prehmus.selli.domain.model.LocationFeedEvent
 import com.prehmus.selli.domain.model.PersonLocation
+import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
@@ -29,8 +31,8 @@ internal interface LocationFeedSource {
 
 internal class ResilientLocationFeed(
     private val source: LocationFeedSource,
-    private val pollingMillis: Long = 60_000L,
     private val retryMillis: List<Long> = listOf(5_000L, 15_000L, 30_000L, 60_000L),
+    private val clock: () -> Instant = Instant::now,
 ) {
     fun observe(): Flow<LocationFeedEvent> = channelFlow {
         if (!source.isConfigured) {
@@ -87,7 +89,7 @@ internal class ResilientLocationFeed(
                         }
                     }
                     // Polling bleibt auch bei still abgerissenem Websocket aktiv.
-                    pollingMillis
+                    feedPollingMillis(result.getOrThrow(), clock())
                 } else {
                     send(LocationFeedEvent.Failed(classifyCloudError(error)))
                     retryMillis[failures].also { failures = (failures + 1).coerceAtMost(retryMillis.lastIndex) }

@@ -84,6 +84,56 @@ class ResilientLocationFeedTest {
         assertFalse(source.realtimeClosed)
     }
 
+    @Test
+    fun `live polling switches from fifteen to sixty seconds after expiry`() = runTest {
+        val start = POINT.updatedAt
+        val source = FakeSource().apply {
+            result = Result.success(listOf(POINT.copy(liveUntil = start.plusSeconds(30))))
+        }
+        backgroundScope.launch {
+            ResilientLocationFeed(source, clock = { start.plusMillis(testScheduler.currentTime) }).observe().collect {}
+        }
+        runCurrent()
+        assertEquals(1, source.loads)
+        advanceTimeBy(14_999)
+        runCurrent()
+        assertEquals(1, source.loads)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, source.loads)
+        advanceTimeBy(15_000)
+        runCurrent()
+        assertEquals(3, source.loads)
+        advanceTimeBy(59_999)
+        runCurrent()
+        assertEquals(3, source.loads)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(4, source.loads)
+    }
+
+    @Test
+    fun `normal polling switches to live after a successful load`() = runTest {
+        val source = FakeSource().apply { result = Result.success(listOf(POINT)) }
+        backgroundScope.launch {
+            ResilientLocationFeed(source, clock = { POINT.updatedAt }).observe().collect {}
+        }
+        runCurrent()
+        advanceTimeBy(59_999)
+        runCurrent()
+        assertEquals(1, source.loads)
+        source.result = Result.success(listOf(POINT.copy(liveUntil = POINT.updatedAt.plusSeconds(900))))
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(2, source.loads)
+        advanceTimeBy(14_999)
+        runCurrent()
+        assertEquals(2, source.loads)
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(3, source.loads)
+    }
+
     private class FakeSource(configured: Boolean = true) : LocationFeedSource {
         override val isConfigured = configured
         override val accessState = MutableStateFlow(CloudAccessState.RECONFIRMATION_REQUIRED)

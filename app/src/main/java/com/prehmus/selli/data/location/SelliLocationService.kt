@@ -2,6 +2,7 @@ package com.prehmus.selli.data.location
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ForegroundServiceStartNotAllowedException
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,46 +29,38 @@ import com.prehmus.selli.MainActivity
 import com.prehmus.selli.R
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.supabase.SupabaseRuntime
-import com.prehmus.selli.data.supabase.logCloudError
-import com.prehmus.selli.domain.location.MOVING_DISTANCE_THRESHOLD_METERS
-import com.prehmus.selli.domain.location.MOVING_SPEED_THRESHOLD_MPS
-import com.prehmus.selli.domain.location.TrackingMode
-import com.prehmus.selli.domain.location.nextTrackingMode
-import com.prehmus.selli.domain.location.settings
+import com.prehmus.selli.domain.location.LiveShare
+import com.prehmus.selli.domain.location.SharingMode
+import com.prehmus.selli.domain.location.cadence
 import com.prehmus.selli.domain.model.CloudAccessState
-import com.prehmus.selli.domain.model.Person
-import com.prehmus.selli.domain.model.PersonLocation
-import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.OwnLiveShareState
 import java.time.Instant
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicReference
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
-/** Erfasst den eigenen Standort mit bewegungsabhängiger Taktung und lädt ihn fehlertolerant hoch. */
+/** Sparsamer Normalbetrieb mit ausdrücklich gestarteter, befristeter Live-Freigabe. */
 class SelliLocationService : Service() {
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var fusedLocationClient: FusedLocationProviderClient
-    private var locationRepository: LocationRepository? = null
-    private var ownPerson: Person? = null
-    private var trackingMode = TrackingMode.STATIONARY
-    private var lastMovementElapsedRealtime = 0L
-    private val uploadMutex = Mutex()
-    private val uploadInProgress = AtomicBoolean(false)
-    private data class PendingUpload(val point: Location, val location: PersonLocation)
-    private val pendingUpload = AtomicReference<PendingUpload?>(null)
-
-    @Volatile
-    private var lastUploadedLocation: Location? = null
-
+    private lateinit var storage: LiveShareStorage
+    private var coordinator: LocationSharingCoordinator? = null
+    private val syncRequests = Channel<Unit>(Channel.CONFLATED)
+    private var expiryJob: Job? = null
+    private var trackingMode: SharingMode? = null
+    private var notificationShare: LiveShare? = null
     private var isStarting = false
-    private var isTracking = false
+    private var foregroundStarted = false
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
@@ -77,21 +70,39 @@ class SelliLocationService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        storage = LiveShareRuntime.storage(applicationContext)
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
         if (!hasFineLocationPermission()) {
             stopSelf()
             return
         }
-        startLocationForeground()
+        foregroundStarted = startLocationForeground()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (!hasFineLocationPermission()) {
+        // Auch null-Intents nach START_STICKY lesen den absoluten Ablauf aus dem Speicher.
+        synchronized(storage) {
+            if (intent?.action == ACTION_STOP_LIVE) {
+                storage.write(null)
+                LiveShareRuntime.mutableState.value = OwnLiveShareState()
+            }
+            val share = storage.read()
+            if (LiveShareRuntime.mutableState.value.share != share) {
+                LiveShareRuntime.mutableState.value = OwnLiveShareState(share = share)
+            }
+        }
+        if (!foregroundStarted || !hasFineLocationPermission()) {
             stopSelf()
             return START_NOT_STICKY
         }
-        if (isStarting || isTracking) return START_STICKY
+        if (coordinator != null) {
+            refreshTracking()
+            scheduleExpiry()
+            syncRequests.trySend(Unit)
+            return START_STICKY
+        }
+        if (isStarting) return START_STICKY
 
         val repositoryFactory = LocationRuntime.repositoryFactory
         val personProvider = LocationRuntime.ownPersonProvider
@@ -99,167 +110,134 @@ class SelliLocationService : Service() {
             stopSelf()
             return START_NOT_STICKY
         }
-
         isStarting = true
         serviceScope.launch {
-            val resolvedPerson = runCatching { personProvider(applicationContext) }
-                .onFailure { error -> AndroidCalendarLogger.error(SOURCE_RUNTIME, error) }
-                .getOrNull()
-            if (resolvedPerson == null) {
-                stopSelf()
-                return@launch
-            }
-
-            val repository = runCatching { repositoryFactory(applicationContext) }
-                .onFailure { error -> AndroidCalendarLogger.error(SOURCE_RUNTIME, error) }
-                .getOrNull()
-            if (repository == null) {
-                stopSelf()
-                return@launch
-            }
-
-            ownPerson = resolvedPerson
-            locationRepository = repository
-            serviceScope.launch {
-                SupabaseRuntime.client?.accessState?.collect { state ->
-                    if (state == CloudAccessState.CONNECTED && !uploadInProgress.get()) uploadLatestLocation()
+            try {
+                val person = personProvider(applicationContext)
+                if (person == null) {
+                    stopSelf()
+                    return@launch
                 }
+                val sharing = LocationSharingCoordinator(
+                    repository = repositoryFactory(applicationContext),
+                    person = person,
+                    storage = storage,
+                    state = LiveShareRuntime.mutableState,
+                    elapsedMillis = SystemClock::elapsedRealtime,
+                    logger = AndroidCalendarLogger,
+                )
+                coordinator = sharing
+                // Ein Worker und ein Signal statt einer wachsenden Offline-Warteschlange.
+                serviceScope.launch {
+                    for (request in syncRequests) {
+                        sharing.uploadLatest()
+                    }
+                }
+                serviceScope.launch {
+                    SupabaseRuntime.client?.accessState?.collect { state ->
+                        if (state == CloudAccessState.CONNECTED && !sharing.isSyncing) {
+                            syncRequests.trySend(Unit)
+                        }
+                    }
+                }
+                refreshTracking()
+                scheduleExpiry()
+                syncRequests.trySend(Unit)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                AndroidCalendarLogger.error(SOURCE_RUNTIME, error)
+                stopSelf()
+            } finally {
+                isStarting = false
             }
-            beginTrackingIfPermitted()
-            isStarting = false
         }
-
         return START_STICKY
     }
 
     override fun onDestroy() {
-        if (::fusedLocationClient.isInitialized) {
-            fusedLocationClient.removeLocationUpdates(locationCallback)
-        }
-        isStarting = false
-        isTracking = false
+        if (::fusedLocationClient.isInitialized) fusedLocationClient.removeLocationUpdates(locationCallback)
+        syncRequests.close()
         serviceScope.cancel()
         super.onDestroy()
     }
 
-    /**
-     * Manche OEM-Akkumanager (u. a. Samsung One UI) killen einen Foreground-Service, sobald die
-     * App aus "Zuletzt verwendet" gewischt wird — trotz laufender Benachrichtigung und obwohl
-     * `START_STICKY` einen Neustart nach echtem Speicherdruck bereits abdeckt. Dieser Callback
-     * feuert genau in dem Moment und stößt den Dienst aktiv neu an, statt auf den nächsten
-     * Öffnen des Standort-Tabs zu warten.
-     */
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        if (hasFineLocationPermission()) {
-            start(applicationContext)
-        }
+        if (hasFineLocationPermission()) start(applicationContext)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun handleLocation(location: Location) {
-        val nowElapsedRealtime = SystemClock.elapsedRealtime()
-        val metersSinceLastUpload = lastUploadedLocation?.distanceTo(location) ?: 0f
-        val speedMetersPerSecond = if (location.hasSpeed()) location.speed else null
-        val movementDetected =
-            speedMetersPerSecond != null && speedMetersPerSecond > MOVING_SPEED_THRESHOLD_MPS ||
-                metersSinceLastUpload > MOVING_DISTANCE_THRESHOLD_METERS
-        if (movementDetected) {
-            lastMovementElapsedRealtime = nowElapsedRealtime
-        }
-
-        val millisSinceLastMovement = if (lastMovementElapsedRealtime == 0L) {
-            Long.MAX_VALUE
-        } else {
-            (nowElapsedRealtime - lastMovementElapsedRealtime).coerceAtLeast(0L)
-        }
-        val nextMode = nextTrackingMode(
-            current = trackingMode,
-            speedMetersPerSecond = speedMetersPerSecond,
-            metersSinceLastUpload = metersSinceLastUpload,
-            millisSinceLastMovement = millisSinceLastMovement,
+        val sharing = coordinator ?: return
+        // Zuerst ablaufen und die Anfrage umstellen, dann auch späte Fixes normal behandeln.
+        refreshTracking()
+        sharing.offer(
+            LocationFix(
+                latitude = location.latitude,
+                longitude = location.longitude,
+                accuracyMeters = if (location.hasAccuracy()) location.accuracy else null,
+                speedMetersPerSecond = if (location.hasSpeed()) location.speed else null,
+                measuredAt = Instant.ofEpochMilli(location.time),
+            ),
         )
-        if (nextMode != trackingMode) {
-            trackingMode = nextMode
-            restartTrackingIfPermitted()
-        }
-
-        if (locationRepository == null) return
-        val person = ownPerson ?: return
-        val personLocation = PersonLocation(
-            person = person,
-            latitude = location.latitude,
-            longitude = location.longitude,
-            accuracyMeters = if (location.hasAccuracy()) location.accuracy.toDouble() else null,
-            speedMetersPerSecond = speedMetersPerSecond?.toDouble(),
-            isMoving = trackingMode == TrackingMode.MOVING,
-            updatedAt = Instant.ofEpochMilli(location.time),
-        )
-        // Nur die jüngste Messung behalten, keine unbeschränkte Offline-Warteschlange.
-        val pending = PendingUpload(Location(location), personLocation)
-        pendingUpload.updateAndGet { previous ->
-            if (previous == null || previous.location.updatedAt <= personLocation.updatedAt) pending else previous
-        }
-        serviceScope.launch { uploadLatestLocation() }
+        syncRequests.trySend(Unit)
     }
 
-    private suspend fun uploadLatestLocation() {
-        uploadMutex.withLock {
-            val repository = locationRepository ?: return@withLock
-            val pending = pendingUpload.get() ?: return@withLock
-            uploadInProgress.set(true)
-            try {
-                repository.publishOwnLocation(pending.location)
-                    .onSuccess {
-                        lastUploadedLocation = pending.point
-                        // Eine während des Uploads neuere Messung darf nicht gelöscht werden.
-                        pendingUpload.compareAndSet(pending, null)
-                    }
-                    .onFailure { error ->
-                        logCloudError(AndroidCalendarLogger, SOURCE_UPLOAD, error)
-                        // Weiter messen, auch bei ReconfirmationRequired. Keine Activity/kein Dialog.
-                    }
-            } finally {
-                uploadInProgress.set(false)
+    private fun refreshTracking() {
+        val sharing = coordinator ?: return
+        val share = sharing.refresh()
+        val nextMode = sharing.mode
+        if (nextMode != trackingMode) {
+            fusedLocationClient.removeLocationUpdates(locationCallback)
+            requestLocationUpdates(nextMode)
+        }
+        if (notificationShare != share) {
+            notificationShare = share
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification())
+        }
+    }
+
+    private fun scheduleExpiry() {
+        expiryJob?.cancel()
+        expiryJob = serviceScope.launch {
+            while (isActive) {
+                val share = coordinator?.refresh()
+                val waitMillis = share?.remaining(Instant.now())?.toMillis()?.coerceIn(1L, 30_000L) ?: 30_000L
+                delay(waitMillis)
+                refreshTracking()
+                syncRequests.trySend(Unit)
             }
         }
     }
 
-    private fun beginTrackingIfPermitted() {
-        if (!hasFineLocationPermission()) {
-            stopSelf()
-            return
-        }
-        requestLocationUpdates()
-    }
-
-    private fun restartTrackingIfPermitted() {
-        if (!hasFineLocationPermission()) {
-            stopSelf()
-            return
-        }
-        fusedLocationClient.removeLocationUpdates(locationCallback)
-        requestLocationUpdates()
-    }
-
     @SuppressLint("MissingPermission")
-    private fun requestLocationUpdates() {
-        val settings = trackingMode.settings()
+    private fun requestLocationUpdates(mode: SharingMode) {
+        if (!hasFineLocationPermission()) {
+            stopSelf()
+            return
+        }
+        val settings = mode.cadence()
         val priority = if (settings.highAccuracy) {
             Priority.PRIORITY_HIGH_ACCURACY
         } else {
             Priority.PRIORITY_BALANCED_POWER_ACCURACY
         }
         val request = LocationRequest.Builder(priority, settings.intervalMillis)
+            .setMinUpdateIntervalMillis(settings.minUpdateIntervalMillis)
             .setMinUpdateDistanceMeters(settings.minUpdateDistanceMeters)
             .setMaxUpdateDelayMillis(settings.maxUpdateDelayMillis)
             .setWaitForAccurateLocation(false)
             .build()
-
         try {
             fusedLocationClient.requestLocationUpdates(request, locationCallback, Looper.getMainLooper())
-            isTracking = true
+                .addOnFailureListener { error ->
+                    AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
+                    trackingMode = null
+                    stopSelf()
+                }
+            trackingMode = mode
         } catch (error: SecurityException) {
             AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
             stopSelf()
@@ -271,27 +249,34 @@ class SelliLocationService : Service() {
             PackageManager.PERMISSION_GRANTED
 
     private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            NOTIFICATION_CHANNEL_ID,
-            "Standortfreigabe",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            setSound(null, null)
-            enableVibration(false)
-        }
+        val channel = NotificationChannel(NOTIFICATION_CHANNEL_ID, "Standortfreigabe", NotificationManager.IMPORTANCE_LOW)
+            .apply {
+                setSound(null, null)
+                enableVibration(false)
+            }
         getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    private fun startLocationForeground() {
+    private fun startLocationForeground(): Boolean = try {
+        notificationShare = storage.read()
         val notification = buildNotification()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION,
-            )
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
             startForeground(NOTIFICATION_ID, notification)
+        }
+        true
+    } catch (error: SecurityException) {
+        AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
+        stopSelf()
+        false
+    } catch (error: RuntimeException) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && error is ForegroundServiceStartNotAllowedException) {
+            AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
+            stopSelf()
+            false
+        } else {
+            throw error
         }
     }
 
@@ -304,27 +289,59 @@ class SelliLocationService : Service() {
             },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
+        val share = notificationShare
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification_selli)
-            .setContentTitle("Selli teilt deinen Standort")
+            .setContentTitle(if (share == null) "Selli teilt deinen Standort" else "Live-Standort aktiv")
+            .setContentText(
+                if (share == null) {
+                    "Alle 15 Min., sparsam"
+                } else {
+                    "Endet um ${DateTimeFormatter.ofPattern("HH:mm").withZone(ZoneId.systemDefault()).format(share.endsAt)}"
+                },
+            )
             .setOngoing(true)
             .setSilent(true)
             .setContentIntent(contentIntent)
-            .build()
+        if (share != null) {
+            val stopIntent = PendingIntent.getService(
+                this,
+                NOTIFICATION_ID,
+                Intent(this, SelliLocationService::class.java).setAction(ACTION_STOP_LIVE),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "Beenden", stopIntent)
+        }
+        return builder.build()
     }
 
     companion object {
+        const val ACTION_SYNC = "com.prehmus.selli.location.SYNC"
+        const val ACTION_STOP_LIVE = "com.prehmus.selli.location.STOP_LIVE"
         private const val NOTIFICATION_CHANNEL_ID = "selli_location"
         private const val NOTIFICATION_ID = 2_026_0826
         private const val SOURCE_RUNTIME = "Standortdienst-Abhängigkeiten"
-        private const val SOURCE_UPLOAD = "Standortdienst-Upload"
         private const val SOURCE_PERMISSION = "Standortdienst-Berechtigung"
 
-        fun start(context: Context) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, SelliLocationService::class.java),
-            )
+        fun start(context: Context) = startWithAction(context, ACTION_SYNC)
+
+        fun sync(context: Context) = startWithAction(context, ACTION_SYNC)
+
+        private fun startWithAction(context: Context, action: String) {
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, SelliLocationService::class.java).setAction(action),
+                )
+            } catch (error: SecurityException) {
+                AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
+            } catch (error: RuntimeException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && error is ForegroundServiceStartNotAllowedException) {
+                    AndroidCalendarLogger.error(SOURCE_PERMISSION, error)
+                } else {
+                    throw error
+                }
+            }
         }
 
         fun stop(context: Context) {

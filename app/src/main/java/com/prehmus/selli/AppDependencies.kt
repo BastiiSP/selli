@@ -7,6 +7,7 @@ import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LiveShareController
 import com.prehmus.selli.domain.repository.LocationRepository
 import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
@@ -30,6 +31,9 @@ interface AppDependencies {
 
     /** Positionen beider Personen (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
     val locationRepository: LocationRepository
+
+    /** Start/Ende der eigenen, befristeten Live-Freigabe; die Taktung setzt der Standortdienst um. */
+    val liveShareController: LiveShareController
 
     /** Gemeinsame Ausgaben (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
     val expenseRepository: ExpenseRepository

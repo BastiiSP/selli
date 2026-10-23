@@ -710,4 +710,34 @@ aber relevant, wenn zwischen Anlegen und Testen Tage liegen.
 - kein Google **Client Secret** in Supabase
 - keine Supabase CLI, kein `SUPABASE_ACCESS_TOKEN`
 - keine Storage-Buckets, keine Edge Functions
-- keine zweite Migration — `locations` und `selli_members` sind das ganze Schema
+- Für den damaligen Standort-Basisstand war keine zweite Migration nötig.
+  Ergänzung 23.10.2026: Für die Live-Freigabe ist die unten beschriebene Migration erforderlich.
+
+
+## Ergänzung 23.10.2026: befristete Live-Freigabe
+
+Nach der Standort-Basismigration auch
+`supabase/migrations/20261023120000_selli_location_live_share.sql` im SQL-Editor
+vollständig ausführen (alternativ im eingerichteten CLI-Projekt `supabase db push`).
+Die Migration ergänzt idempotent die nullable Spalte `live_until`; bestehende
+Positionen bleiben erhalten. Die bisherigen tabellenweiten Grants und RLS-Policies
+reichen aus: Mitglieder lesen beide Zeilen und aktualisieren nur ihre eigene.
+
+Anschließend im SQL-Editor prüfen:
+
+```sql
+select column_name, data_type, is_nullable
+from information_schema.columns
+where table_schema = 'public' and table_name = 'locations' and column_name = 'live_until';
+```
+
+Erwartet: eine Zeile, `timestamp with time zone`, `YES`. Danach mit beiden Konten
+Start, vorzeitiges Ende und automatischen Ablauf prüfen: nur die eigene Endzeit
+ändert sich, der Partner sieht die Freigabe, nach Ende steht `live_until` auf `null`.
+Ein Live-Update verändert `updated_at` nicht; dieses Feld bleibt der Messzeitpunkt.
+Ohne Migration scheitert nur die Live-Kennzeichnung sichtbar; Positions-Upserts
+enthalten die neue Spalte nicht, Lesen und Normalbetrieb funktionieren weiter.
+
+Die historischen Angaben oben zur adaptiven Taktung sind damit abgelöst:
+Normalbetrieb 15 Minuten, Live-Messung 10 Sekunden und Feed-Polling bei aktiver
+Live-Freigabe 15 Sekunden (sonst 60 Sekunden). Gerätetests sind separat auszuführen.

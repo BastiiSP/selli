@@ -215,6 +215,9 @@ laut Handover ausdrücklich nicht gewünscht.
 
 ### Tracking-Taktung
 
+> Abgelöst am 2026-10-23 durch `2026-10-23-standort-live-freigabe-design.md`
+> (Normalbetrieb 15 min ohne Bewegungserkennung, befristete Live-Freigabe).
+
 Foreground-Service mit `foregroundServiceType="location"` und stiller Notification
 (Kanal-Importance `LOW`). Ab Android 14 ist das für verlässliche
 Hintergrund-Standortdaten unvermeidbar; ohne Service drosselt Android auf wenige

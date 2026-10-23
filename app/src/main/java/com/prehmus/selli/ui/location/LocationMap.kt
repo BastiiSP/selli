@@ -8,6 +8,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -26,12 +27,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.android.gms.maps.model.MapStyleOptions
+import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
@@ -43,14 +46,17 @@ import com.prehmus.selli.domain.model.LocationFreshness
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.model.freshness
+import com.prehmus.selli.domain.model.isImprecise
+import com.prehmus.selli.domain.model.isLiveSharing
 import com.prehmus.selli.ui.theme.onAccentColor
 import com.prehmus.selli.ui.theme.personColor
-import java.time.Duration
 import java.time.Instant
 
 /**
  * Die Karte im Selli-Look: warme, gedämpfte Kartenstile (hell/dunkel folgen dem System-Theme)
- * und je Person ein Marker mit dem gezeichneten Avatar-Gesicht in der Personenfarbe.
+ * und je Person ein Marker mit dem gezeichneten Avatar-Gesicht in der Personenfarbe. Unter dem
+ * Marker stehen Modus (LIVE) und das echte Messalter; veraltete Positionen werden entsättigt
+ * beschriftet, ungenaue bekommen einen Genauigkeitskreis.
  *
  * Bewusst nicht enthalten: kein Schalter für die Standortfreigabe, keine Entfernungsanzeige.
  */
@@ -59,6 +65,7 @@ fun LocationMap(
     locations: List<PersonLocation>,
     now: Instant,
     modifier: Modifier = Modifier,
+    bottomPadding: Dp = 0.dp,
 ) {
     val darkTheme = isSystemInDarkTheme()
     val context = LocalContext.current
@@ -93,6 +100,7 @@ fun LocationMap(
     GoogleMap(
         modifier = modifier.fillMaxSize(),
         cameraPositionState = cameraPositionState,
+        contentPadding = PaddingValues(bottom = bottomPadding),
         properties = MapProperties(mapStyleOptions = styleOptions),
         uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false),
     ) {
@@ -117,11 +125,31 @@ private fun PersonMarker(location: PersonLocation, now: Instant) {
     val markerState = rememberUpdatedMarkerState(position = animated)
 
     val freshness = location.freshness(now)
+    val label = location.markerLabel(now)
+    val imprecision = location.imprecisionLabel()
+    val live = location.isLiveSharing(now)
+    val color = personColor(location.person)
+
+    // Genauigkeitskreis nur bei ungenauen Messungen: dort ist der Pin allein irreführend genau.
+    val accuracy = location.accuracyMeters
+    if (accuracy != null && location.isImprecise()) {
+        Circle(
+            center = animated,
+            radius = accuracy,
+            fillColor = color.copy(alpha = 0.12f),
+            strokeColor = color.copy(alpha = 0.45f),
+            strokeWidth = 2f,
+        )
+    }
+
     MarkerComposable(
-        keys = arrayOf(location.person, freshness),
+        // MarkerComposable rendert nur bei geänderten Keys neu — die Beschriftung gehört dazu.
+        keys = arrayOf(location.person, freshness, label, imprecision.orEmpty(), live),
         state = markerState,
         anchor = Offset(0.5f, 0.92f),
-        title = if (location.person == Person.MELLI) "Melli" else "Basti",
+        title = location.person.displayName(),
+        // Modus/Alter stehen sonst nur im Marker-Bitmap und wären für TalkBack unerreichbar.
+        snippet = listOfNotNull(label, imprecision).joinToString(" · "),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(
@@ -135,37 +163,42 @@ private fun PersonMarker(location: PersonLocation, now: Instant) {
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
             )
-            FreshnessBadge(person = location.person, freshness = freshness, now = now, location = location)
+            FreshnessBadge(
+                person = location.person,
+                stale = freshness == LocationFreshness.STALE,
+                label = label,
+                imprecision = imprecision,
+            )
         }
     }
 }
 
-/** „gerade jetzt“ / „vor 8 Min.“ / „vor längerer Zeit“ — Alter statt Entfernung. */
+/**
+ * „LIVE · vor 10 s“ / „vor 8 Min.“ / „veraltet · vor 2 Std.“ — Alter statt Entfernung.
+ * Veraltete Angaben stehen bewusst nicht in der kräftigen Personenfarbe, damit eine alte
+ * Position nicht wie eine aktuelle wirkt.
+ */
 @Composable
 private fun FreshnessBadge(
     person: Person,
-    freshness: LocationFreshness,
-    now: Instant,
-    location: PersonLocation,
+    stale: Boolean,
+    label: String,
+    imprecision: String?,
 ) {
-    val label = when (freshness) {
-        LocationFreshness.LIVE -> "gerade jetzt"
-        LocationFreshness.RECENT -> {
-            val minutes = Duration.between(location.updatedAt, now).toMinutes().coerceAtLeast(1)
-            "vor $minutes Min."
-        }
-        LocationFreshness.STALE -> "vor längerer Zeit"
-    }
     Surface(
-        color = personColor(person),
+        color = if (stale) MaterialTheme.colorScheme.surfaceVariant else personColor(person),
         shape = CircleShape,
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = onAccentColor(),
+        Column(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-        )
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            val textColor = if (stale) MaterialTheme.colorScheme.onSurface else onAccentColor()
+            Text(text = label, style = MaterialTheme.typography.labelSmall, color = textColor)
+            if (imprecision != null) {
+                Text(text = imprecision, style = MaterialTheme.typography.labelSmall, color = textColor)
+            }
+        }
     }
 }
 
@@ -175,9 +208,9 @@ private fun FreshnessBadge(
  * vortäuschen, das es nicht gibt.
  *
  * Interpoliert in `Double` (nicht über einen `TwoWayConverter` auf `AnimationVector2D`), weil
- * `Float` bei Geokoordinaten nur ~1 m Auflösung hat. Da Updates mindestens 30 s auseinander
- * liegen, ist die vorige Animation immer beendet — der alte Zielpunkt ist damit der korrekte
- * Startpunkt.
+ * `Float` bei Geokoordinaten nur ~1 m Auflösung hat. Auch im Live-Modus liegen Uploads
+ * mindestens 10 s auseinander, die vorige Animation ist also immer beendet — der alte Zielpunkt
+ * ist damit der korrekte Startpunkt.
  */
 @Composable
 private fun animatedLatLng(target: LatLng): LatLng {

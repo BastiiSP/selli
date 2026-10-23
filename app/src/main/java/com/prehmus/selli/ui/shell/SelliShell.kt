@@ -195,11 +195,13 @@ fun SelliShell(
                     factory = LocationViewModel.factory(
                         repository = dependencies.locationRepository,
                         cloudSession = dependencies.cloudSessionRepository,
+                        liveShareController = dependencies.liveShareController,
                         isConfigured = dependencies.isLocationSharingConfigured,
                     ),
                 )
                 LocationScreen(
                     viewModel = locationViewModel,
+                    ownPerson = ownPerson,
                     reconfirm = cloudReconfirm,
                     onReconfirm = cloudAccessViewModel::reconfirm,
                 )

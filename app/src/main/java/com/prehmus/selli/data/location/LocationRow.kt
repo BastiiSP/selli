@@ -26,6 +26,7 @@ data class LocationRow(
     @SerialName("is_moving")
     val isMoving: Boolean = false,
     @SerialName("updated_at") val updatedAt: String,
+    @SerialName("live_until") val liveUntil: String? = null,
 ) {
     companion object
 }
@@ -43,6 +44,7 @@ fun LocationRow.toDomain(): PersonLocation? {
         speedMetersPerSecond = speedMps,
         isMoving = isMoving,
         updatedAt = mappedUpdatedAt,
+        liveUntil = liveUntil?.let { runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull() },
     )
 }
 
@@ -55,4 +57,5 @@ fun LocationRow.Companion.from(location: PersonLocation, userId: String): Locati
     speedMps = location.speedMetersPerSecond,
     isMoving = location.isMoving,
     updatedAt = DateTimeFormatter.ISO_INSTANT.format(location.updatedAt),
+    liveUntil = location.liveUntil?.let(DateTimeFormatter.ISO_INSTANT::format),
 )

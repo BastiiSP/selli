@@ -3,6 +3,8 @@ package com.prehmus.selli.ui.preview
 import com.prehmus.selli.AppDependencies
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.finance.prepareSettlement
+import com.prehmus.selli.domain.location.LiveShareDuration
+import com.prehmus.selli.domain.location.startLiveShare
 import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
@@ -29,7 +31,10 @@ import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.IcsCalendarRepository
+import com.prehmus.selli.domain.repository.LiveShareController
+import com.prehmus.selli.domain.repository.LiveShareStartResult
 import com.prehmus.selli.domain.repository.LocationRepository
+import com.prehmus.selli.domain.repository.OwnLiveShareState
 import com.prehmus.selli.domain.repository.NoteRepository
 import com.prehmus.selli.domain.repository.PlaceSuggestionRepository
 import com.prehmus.selli.domain.repository.SessionRepository
@@ -242,6 +247,22 @@ class PreviewDependencies : AppDependencies {
 
         override suspend fun publishOwnLocation(location: PersonLocation): Result<Unit> =
             Result.success(Unit)
+
+        override suspend fun publishLiveUntil(liveUntil: Instant?): Result<Boolean> =
+            Result.success(true)
+    }
+
+    // Preview-Freigabe ohne Dienst: Start/Ende ändern nur den sichtbaren Zustand.
+    override val liveShareController: LiveShareController = object : LiveShareController {
+        override val state = MutableStateFlow(OwnLiveShareState())
+        override fun start(duration: LiveShareDuration): LiveShareStartResult {
+            val share = startLiveShare(Instant.now(), duration)
+            state.value = OwnLiveShareState(share = share, published = true)
+            return LiveShareStartResult.Started(share)
+        }
+        override fun stop() {
+            state.value = OwnLiveShareState()
+        }
     }
 
     override val isLocationSharingConfigured: Boolean = true

@@ -7,6 +7,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -24,6 +25,7 @@ class LocationRowTest {
             speedMetersPerSecond = 3.25,
             isMoving = true,
             updatedAt = Instant.parse("2026-08-26T14:03:11.482Z"),
+            liveUntil = Instant.parse("2026-08-26T15:03:11.482Z"),
         )
 
         val mapped = LocationRow.from(location, userId = "user-123").toDomain()
@@ -85,6 +87,7 @@ class LocationRowTest {
         assertEquals(6.75, location?.accuracyMeters ?: 0.0, 0.0)
         assertEquals(1.5, location?.speedMetersPerSecond ?: 0.0, 0.0)
         assertTrue(location?.isMoving == true)
+        assertNull(location?.liveUntil)
     }
 
     @Test
@@ -95,6 +98,31 @@ class LocationRowTest {
     @Test
     fun `unparseable updated at maps to null`() {
         assertNull(validRow(updatedAt = "not-a-timestamp").toDomain())
+    }
+
+    @Test
+    fun `live until reads postgres timestamp independently of measurement`() {
+        val row = validRow().copy(liveUntil = "2026-08-26T15:03:11.482123+00:00")
+        val decoded = json.decodeFromString<LocationRow>(json.encodeToString(row)).toDomain()
+        assertEquals(Instant.parse("2026-08-26T15:03:11.482123Z"), decoded?.liveUntil)
+        assertEquals(Instant.parse("2026-08-26T14:03:11.482123Z"), decoded?.updatedAt)
+        assertNull(validRow().copy(liveUntil = "invalid").toDomain()?.liveUntil)
+    }
+
+    @Test
+    fun `upsert never serializes live until even with defaults enabled`() {
+        val location = checkNotNull(validRow().toDomain()).copy(
+            liveUntil = Instant.parse("2026-08-26T15:03:11Z"),
+        )
+        val row = LocationUpsertRow.from(location, "user-123")
+        val payload = Json { encodeDefaults = true }.encodeToString(row)
+        val fields = json.parseToJsonElement(payload).jsonObject
+        assertFalse(fields.containsKey("live_until"))
+        assertEquals(
+            setOf("user_id", "person", "latitude", "longitude", "accuracy_meters", "speed_mps", "is_moving", "updated_at"),
+            fields.keys,
+        )
+        assertEquals(location.copy(liveUntil = null), json.decodeFromString<LocationRow>(payload).toDomain())
     }
 
     private fun validRow(
