@@ -2,6 +2,7 @@ package com.prehmus.selli
 
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.CloudSessionRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
@@ -35,6 +36,12 @@ interface AppDependencies {
 
     /** Gemeinsame Ideen-Ordner/-Punkte (Supabase). Ohne Zugangsdaten eine dauerhaft leere Quelle. */
     val noteRepository: NoteRepository
+
+    /**
+     * Gemeinsame Supabase-Anmeldung für Standort, Kosten und Ideen: Zustand, stille Prüfung und
+     * die interaktive Bestätigung des bestehenden Google-Kontos.
+     */
+    val cloudSessionRepository: CloudSessionRepository
 
     /**
      * false, wenn in `local.properties` keine Supabase-Zugangsdaten liegen — dann zeigt der

@@ -71,6 +71,12 @@ fun SelliShell(
             dependencies.eventCustomizationRepository,
         ),
     )
+    // Ein gemeinsamer Bestätigungs-Weg für Ideen, Kosten und Standort (siehe CloudAccessViewModel).
+    val cloudAccessViewModel: CloudAccessViewModel = viewModel(
+        factory = CloudAccessViewModel.factory(dependencies.cloudSessionRepository),
+    )
+    val cloudReconfirm by cloudAccessViewModel.reconfirm.collectAsState()
+
     // Ziel eines Ideen-Deep-Links (Benachrichtigung "Neue Idee") — die Ideen-Route selbst
     // trägt keinen Ordner in der Navigation, deshalb hier zwischengehalten.
     var pendingIdeenFolderId by remember { mutableStateOf<String?>(null) }
@@ -120,10 +126,13 @@ fun SelliShell(
                     factory = IdeenViewModel.factory(
                         repository = dependencies.noteRepository,
                         ownPerson = ownPerson,
+                        cloudSession = dependencies.cloudSessionRepository,
                     ),
                 )
                 IdeenScreen(
                     viewModel = ideenViewModel,
+                    reconfirm = cloudReconfirm,
+                    onReconfirm = cloudAccessViewModel::reconfirm,
                     initialExpandedFolderId = pendingIdeenFolderId,
                 )
             }
@@ -139,10 +148,13 @@ fun SelliShell(
                     factory = IdeenViewModel.factory(
                         repository = dependencies.noteRepository,
                         ownPerson = ownPerson,
+                        cloudSession = dependencies.cloudSessionRepository,
                     ),
                 )
                 IdeenScreen(
                     viewModel = ideenViewModel,
+                    reconfirm = cloudReconfirm,
+                    onReconfirm = cloudAccessViewModel::reconfirm,
                     initialExpandedFolderId = folderId,
                 )
             }
@@ -169,18 +181,28 @@ fun SelliShell(
                     factory = ExpensesViewModel.factory(
                         repository = dependencies.expenseRepository,
                         ownPerson = ownPerson,
+                        cloudSession = dependencies.cloudSessionRepository,
                     ),
                 )
-                ExpensesScreen(viewModel = expensesViewModel)
+                ExpensesScreen(
+                    viewModel = expensesViewModel,
+                    reconfirm = cloudReconfirm,
+                    onReconfirm = cloudAccessViewModel::reconfirm,
+                )
             }
             composable(SelliDestination.LOCATION.route) {
                 val locationViewModel: LocationViewModel = viewModel(
                     factory = LocationViewModel.factory(
                         repository = dependencies.locationRepository,
+                        cloudSession = dependencies.cloudSessionRepository,
                         isConfigured = dependencies.isLocationSharingConfigured,
                     ),
                 )
-                LocationScreen(viewModel = locationViewModel)
+                LocationScreen(
+                    viewModel = locationViewModel,
+                    reconfirm = cloudReconfirm,
+                    onReconfirm = cloudAccessViewModel::reconfirm,
+                )
             }
             composable(SETTINGS_ROUTE) {
                 val settingsViewModel: SettingsViewModel = viewModel(

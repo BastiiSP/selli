@@ -57,6 +57,10 @@ import com.prehmus.selli.R
 import com.prehmus.selli.domain.finance.BalanceDirection
 import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.Person
+import com.prehmus.selli.ui.components.CloudInitialLoading
+import com.prehmus.selli.ui.components.CloudIssueBanner
+import com.prehmus.selli.ui.components.CloudLoadFailedState
+import com.prehmus.selli.ui.components.CloudReconfirmUi
 import com.prehmus.selli.ui.components.PersonPill
 import com.prehmus.selli.ui.theme.personColor
 import com.prehmus.selli.ui.theme.personSoftColor
@@ -81,6 +85,8 @@ private val SettlementDateFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy", Loc
 @Composable
 fun ExpensesScreen(
     viewModel: ExpensesViewModel,
+    reconfirm: CloudReconfirmUi,
+    onReconfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -119,14 +125,54 @@ fun ExpensesScreen(
                 .padding(innerPadding)
                 .fillMaxSize(),
         ) {
-            if (uiState.expenses.isEmpty() && !uiState.isRefreshing) {
-                ExpensesEmptyHint(modifier = Modifier.fillMaxSize())
-            } else {
-                LazyColumn(
+            val loadIssue = uiState.loadIssue
+            when {
+                // Noch nie erfolgreich geladen: Fehler bzw. Laden zeigen, nicht den Leerzustand.
+                !uiState.hasLoaded && loadIssue != null -> CloudLoadFailedState(
+                    issue = loadIssue,
+                    subject = "Ausgaben",
+                    reconfirm = reconfirm,
+                    onRetry = viewModel::retry,
+                    onReconfirm = onReconfirm,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                !uiState.hasLoaded -> CloudInitialLoading(
+                    subject = "Ausgaben",
+                    modifier = Modifier.fillMaxSize(),
+                )
+                uiState.expenses.isEmpty() -> Column(modifier = Modifier.fillMaxSize()) {
+                    if (loadIssue != null) {
+                        CloudIssueBanner(
+                            issue = loadIssue,
+                            subject = "Ausgaben",
+                            reconfirm = reconfirm,
+                            onRetry = viewModel::retry,
+                            onReconfirm = onReconfirm,
+                            modifier = Modifier.padding(16.dp),
+                        )
+                    }
+                    ExpensesEmptyHint(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    )
+                }
+                else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (loadIssue != null) {
+                        item(key = "cloud-issue") {
+                            CloudIssueBanner(
+                                issue = loadIssue,
+                                subject = "Ausgaben",
+                                reconfirm = reconfirm,
+                                onRetry = viewModel::retry,
+                                onReconfirm = onReconfirm,
+                            )
+                        }
+                    }
                     item(key = "balance") {
                         BalanceCard(
                             balance = uiState.balance,

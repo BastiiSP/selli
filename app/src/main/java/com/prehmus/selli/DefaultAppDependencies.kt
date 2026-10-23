@@ -11,12 +11,14 @@ import com.prehmus.selli.data.notes.SupabaseNoteRepository
 import com.prehmus.selli.data.location.SupabaseLocationRepository
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
 import com.prehmus.selli.data.places.PlacesAutocompleteRepository
-import com.prehmus.selli.data.supabase.SelliSupabaseClient
+import com.prehmus.selli.data.supabase.SupabaseCloudSessionRepository
+import com.prehmus.selli.data.supabase.SupabaseRuntime
 import com.prehmus.selli.data.places.readAndroidAppIdentity
 import com.prehmus.selli.domain.CalendarMergeService
 import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.CloudSessionRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
@@ -95,15 +97,16 @@ class DefaultAppDependencies(activity: ComponentActivity) : AppDependencies {
             logger = AndroidCalendarLogger,
         )
 
-    // Standortfreigabe: das erste eigene Backend der App, ausschliesslich fuer Positionen.
-    // Die bestehende Google-Anmeldung bleibt unveraendert Quelle der Wahrheit — googleRepository
-    // liefert hier nur zusaetzlich das rohe ID-Token, mit dem sich Supabase EINMALIG koppelt
-    // (danach fuehrt es eine eigene, selbst erneuerte Sitzung).
-    private val supabaseClient = SelliSupabaseClient(
-        supabaseUrl = BuildConfig.SUPABASE_URL,
-        supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
-        idTokenProvider = googleRepository,
-        logger = AndroidCalendarLogger,
+    // Supabase (Standort, Kosten, Ideen): derselbe prozessweite Client wie Standortdienst und
+    // Worker, gesetzt in SelliApplication.onCreate — eine Sitzung, ein Refresh-Token. Die
+    // Google-Anmeldung bleibt Quelle der Wahrheit; Supabase führt daraus eine eigene, selbst
+    // erneuerte Sitzung und koppelt sich bei Verlust still neu.
+    private val supabaseClient = SupabaseRuntime.requireClient()
+
+    // Interaktive Bestätigung des bestehenden Google-Kontos nur hier, wo eine Activity da ist.
+    override val cloudSessionRepository: CloudSessionRepository = SupabaseCloudSessionRepository(
+        client = supabaseClient,
+        interactive = googleRepository,
     )
 
     override val locationRepository: LocationRepository = SupabaseLocationRepository(

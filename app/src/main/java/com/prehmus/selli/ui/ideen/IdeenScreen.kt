@@ -56,6 +56,10 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.R
 import com.prehmus.selli.domain.model.NoteFolder
 import com.prehmus.selli.domain.model.NoteItem
+import com.prehmus.selli.ui.components.CloudInitialLoading
+import com.prehmus.selli.ui.components.CloudIssueBanner
+import com.prehmus.selli.ui.components.CloudLoadFailedState
+import com.prehmus.selli.ui.components.CloudReconfirmUi
 
 /**
  * Sitzt in `SelliShell` zwischen `SelliTopBar`/`SelliBottomBar` — `contentWindowInsets`
@@ -72,6 +76,8 @@ import com.prehmus.selli.domain.model.NoteItem
 @Composable
 fun IdeenScreen(
     viewModel: IdeenViewModel,
+    reconfirm: CloudReconfirmUi,
+    onReconfirm: () -> Unit,
     modifier: Modifier = Modifier,
     initialExpandedFolderId: String? = null,
 ) {
@@ -115,17 +121,55 @@ fun IdeenScreen(
                 .padding(innerPadding)
                 .fillMaxSize(),
         ) {
-            if (uiState.folders.isEmpty() && !uiState.isRefreshing) {
-                IdeenEmptyHint(
-                    message = "Noch keine Ordner",
+            val loadIssue = uiState.loadIssue
+            when {
+                // Noch nie erfolgreich geladen: Fehler bzw. Laden zeigen, nicht „Noch keine Ordner".
+                !uiState.hasLoaded && loadIssue != null -> CloudLoadFailedState(
+                    issue = loadIssue,
+                    subject = "Ideen",
+                    reconfirm = reconfirm,
+                    onRetry = viewModel::retry,
+                    onReconfirm = onReconfirm,
                     modifier = Modifier.fillMaxSize(),
                 )
-            } else {
-                LazyColumn(
+                !uiState.hasLoaded -> CloudInitialLoading(
+                    subject = "Ideen",
+                    modifier = Modifier.fillMaxSize(),
+                )
+                uiState.folders.isEmpty() -> Column(modifier = Modifier.fillMaxSize()) {
+                    if (loadIssue != null) {
+                        CloudIssueBanner(
+                            issue = loadIssue,
+                            subject = "Ideen",
+                            reconfirm = reconfirm,
+                            onRetry = viewModel::retry,
+                            onReconfirm = onReconfirm,
+                            modifier = Modifier.padding(16.dp),
+                        )
+                    }
+                    IdeenEmptyHint(
+                        message = "Noch keine Ordner",
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                    )
+                }
+                else -> LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
+                    if (loadIssue != null) {
+                        item(key = "cloud-issue") {
+                            CloudIssueBanner(
+                                issue = loadIssue,
+                                subject = "Ideen",
+                                reconfirm = reconfirm,
+                                onRetry = viewModel::retry,
+                                onReconfirm = onReconfirm,
+                            )
+                        }
+                    }
                     items(items = uiState.folders, key = { it.id }) { folder ->
                         FolderCard(
                             folder = folder,

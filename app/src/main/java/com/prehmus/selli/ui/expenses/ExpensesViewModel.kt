@@ -6,10 +6,15 @@ import androidx.lifecycle.viewModelScope
 import com.prehmus.selli.domain.finance.BalanceDirection
 import com.prehmus.selli.domain.finance.balanceDirection
 import com.prehmus.selli.domain.finance.calculateBalance
+import com.prehmus.selli.domain.model.CloudAccessState
 import com.prehmus.selli.domain.model.Expense
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.Settlement
+import com.prehmus.selli.domain.repository.CloudSessionRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
+import com.prehmus.selli.ui.components.CloudIssue
+import com.prehmus.selli.ui.components.cloudActionMessage
+import com.prehmus.selli.ui.components.toCloudIssue
 import java.time.Instant
 import java.time.LocalDate
 import kotlinx.coroutines.Job
@@ -43,6 +48,10 @@ data class ExpensesUiState(
     val balance: Double = 0.0,
     val balanceDirection: BalanceDirection = BalanceDirection.SETTLED,
     val isRefreshing: Boolean = false,
+    /** Erst nach dem ersten erfolgreichen Laden ist eine leere Liste ein echter Leerzustand. */
+    val hasLoaded: Boolean = false,
+    /** Warum der angezeigte Stand nicht frisch ist; null nach erfolgreichem Laden. */
+    val loadIssue: CloudIssue? = null,
     val isCreateSheetOpen: Boolean = false,
     val editingExpense: Expense? = null,
     /** Ausgabe, für die gerade die Löschbestätigung offen ist (Wisch-Geste oder Sheet). */
@@ -84,6 +93,7 @@ private fun groupSettledExpenses(
 class ExpensesViewModel(
     private val repository: ExpenseRepository,
     private val ownPerson: Person,
+    private val cloudSession: CloudSessionRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ExpensesUiState(ownPerson = ownPerson))
     val uiState: StateFlow<ExpensesUiState> = _uiState.asStateFlow()
@@ -93,16 +103,50 @@ class ExpensesViewModel(
     // die frische überschreibt (analog zu CalendarViewModel.refreshJob).
     private var refreshJob: Job? = null
 
+    // Zuletzt erfolgreich geladene Ausgleiche — schlägt nur deren Laden fehl, bleiben die
+    // Überschriften der ausgeglichenen Gruppen erhalten, statt datumslos zu werden.
+    private var lastSettlements: List<Settlement> = emptyList()
+
     init {
         refresh()
+        // Nach erfolgreicher Kontobestätigung (egal in welchem Tab) oder wiederhergestellter
+        // Verbindung selbst nachladen, statt auf das nächste Pull-to-Refresh zu warten.
+        viewModelScope.launch {
+            cloudSession.accessState.collect { state ->
+                // Nicht in einen laufenden Refresh grätschen: dessen eigener Erfolg meldet
+                // ebenfalls CONNECTED und würde ihn sonst abbrechen und neu starten.
+                val current = _uiState.value
+                if (state == CloudAccessState.CONNECTED && current.loadIssue != null && !current.isRefreshing) {
+                    refresh()
+                }
+            }
+        }
+    }
+
+    /** „Erneut versuchen": erst die Anmeldung ausdrücklich prüfen lassen, dann neu laden. */
+    fun retry() {
+        viewModelScope.launch {
+            cloudSession.ensureAccess()
+            refresh()
+        }
     }
 
     fun refresh() {
         refreshJob?.cancel()
         _uiState.update { it.copy(isRefreshing = true) }
         refreshJob = viewModelScope.launch {
-            val expenses = repository.loadExpenses()
-            val settlements = repository.loadSettlements()
+            // Bewusst die Result-Varianten: ein Ladefehler darf die sichtbare Liste und den
+            // Saldo nicht mit „keine Ausgaben / ausgeglichen" überschreiben.
+            val expensesResult = repository.loadExpensesResult()
+            val expenses = expensesResult.getOrNull()
+            if (expenses == null) {
+                val issue = expensesResult.exceptionOrNull()?.toCloudIssue() ?: CloudIssue.FAILED
+                _uiState.update { it.copy(isRefreshing = false, loadIssue = issue) }
+                return@launch
+            }
+            val settlementsResult = repository.loadSettlementsResult()
+            val settlements = settlementsResult.getOrNull() ?: lastSettlements
+            lastSettlements = settlements
             val balance = calculateBalance(expenses)
             val settledGroups = groupSettledExpenses(expenses, settlements)
             _uiState.update {
@@ -114,6 +158,8 @@ class ExpensesViewModel(
                     balance = balance,
                     balanceDirection = balanceDirection(balance),
                     isRefreshing = false,
+                    hasLoaded = true,
+                    loadIssue = settlementsResult.exceptionOrNull()?.toCloudIssue(),
                 )
             }
         }
@@ -144,7 +190,7 @@ class ExpensesViewModel(
                 refresh()
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(userMessage = error.message ?: "Ausgabe konnte nicht gespeichert werden.")
+                    it.copy(userMessage = error.cloudActionMessage("Ausgabe konnte nicht gespeichert werden."))
                 }
             }
         }
@@ -172,7 +218,7 @@ class ExpensesViewModel(
                 refresh()
             }.onFailure { error ->
                 _uiState.update {
-                    it.copy(userMessage = error.message ?: "Änderung konnte nicht gespeichert werden.")
+                    it.copy(userMessage = error.cloudActionMessage("Änderung konnte nicht gespeichert werden."))
                 }
             }
         }
@@ -204,7 +250,7 @@ class ExpensesViewModel(
                     _uiState.update {
                         it.copy(
                             deletingExpense = null,
-                            userMessage = error.message ?: "Ausgabe konnte nicht gelöscht werden.",
+                            userMessage = error.cloudActionMessage("Ausgabe konnte nicht gelöscht werden."),
                         )
                     }
                 }
@@ -217,7 +263,7 @@ class ExpensesViewModel(
                 .onSuccess { refresh() }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Ausgleichen ist fehlgeschlagen.")
+                        it.copy(userMessage = error.cloudActionMessage("Ausgleichen ist fehlgeschlagen."))
                     }
                 }
         }
@@ -227,11 +273,15 @@ class ExpensesViewModel(
     fun consumeUserMessage() = _uiState.update { it.copy(userMessage = null) }
 
     companion object {
-        fun factory(repository: ExpenseRepository, ownPerson: Person) =
+        fun factory(
+            repository: ExpenseRepository,
+            ownPerson: Person,
+            cloudSession: CloudSessionRepository,
+        ) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    ExpensesViewModel(repository, ownPerson) as T
+                    ExpensesViewModel(repository, ownPerson, cloudSession) as T
             }
     }
 }

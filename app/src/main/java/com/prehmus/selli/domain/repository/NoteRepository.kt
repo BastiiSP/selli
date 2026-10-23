@@ -4,6 +4,7 @@ import com.prehmus.selli.domain.model.NoteFolder
 import com.prehmus.selli.domain.model.NoteItem
 import com.prehmus.selli.domain.model.Person
 
+/** Result-Fehler sind CloudSyncException; Coroutine-Abbruch wird durchgereicht. */
 interface NoteRepository {
     /** Alle Ordner, neueste zuerst. Liefert bei Problemen eine leere Liste statt zu werfen. */
     suspend fun loadFolders(): List<NoteFolder>

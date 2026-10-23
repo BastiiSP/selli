@@ -1,10 +1,19 @@
 package com.prehmus.selli.domain.repository
 
-/**
- * Zugriff auf das rohe Google-ID-Token der letzten Anmeldung. Bewusst getrennt vom
- * übrigen Kalender-Vertrag: nur die Supabase-Kopplung des Standort-Features braucht es.
- */
 interface GoogleIdTokenProvider {
-    /** Rohes Google-ID-Token der letzten Anmeldung, oder null wenn keine vorliegt. */
     fun lastGoogleIdToken(): String?
+    /** Frisches Google-ID-Token für das gespeicherte eigene Konto, ohne jede UI. Auch für Hintergrundaufgaben. */
+    suspend fun freshGoogleIdTokenSilently(): Result<String>
+}
+
+/** Nur im Activity-Graph verfügbar. Zeigt ggf. den Google-Kontodialog. */
+interface InteractiveGoogleIdTokenProvider {
+    suspend fun reconfirmOwnGoogleAccount(): GoogleReconfirmation
+}
+
+sealed interface GoogleReconfirmation {
+    data class Success(val idToken: String) : GoogleReconfirmation
+    data object Cancelled : GoogleReconfirmation
+    data class WrongAccount(val expectedEmail: String) : GoogleReconfirmation
+    data class Failed(val cause: Throwable) : GoogleReconfirmation
 }

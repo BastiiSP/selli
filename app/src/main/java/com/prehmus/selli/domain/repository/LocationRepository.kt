@@ -1,15 +1,20 @@
 package com.prehmus.selli.domain.repository
 
+import com.prehmus.selli.domain.model.LocationFeedEvent
 import com.prehmus.selli.domain.model.PersonLocation
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 
 interface LocationRepository {
-    /**
-     * Aktuelle Positionen beider Personen, live nachgeliefert. Emittiert bei fehlender
-     * Konfiguration oder fehlgeschlagener Anmeldung eine leere Liste statt zu werfen.
-     */
-    fun observeLocations(): Flow<List<PersonLocation>>
+    /** Liefert Daten oder CloudSyncException; erholt sich nach Fehlern ohne neues Abonnement. */
+    fun observeLocationFeed(): Flow<LocationFeedEvent>
 
-    /** Eigene Position hochladen (Upsert auf die eigene Zeile). Wirft nie. */
+    /** Kompatibilität: nur erfolgreiche Listen, kein falscher Leerzustand bei Netzfehlern. */
+    fun observeLocations(): Flow<List<PersonLocation>> = observeLocationFeed()
+        .filterIsInstance<LocationFeedEvent.Loaded>()
+        .map { it.locations }
+
+    /** Eigene Position hochladen; Fehler als CloudSyncException, Abbruch wird durchgereicht. */
     suspend fun publishOwnLocation(location: PersonLocation): Result<Unit>
 }

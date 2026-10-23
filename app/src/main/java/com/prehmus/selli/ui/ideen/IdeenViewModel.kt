@@ -3,12 +3,17 @@ package com.prehmus.selli.ui.ideen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.prehmus.selli.domain.model.CloudAccessState
 import com.prehmus.selli.domain.model.NoteFolder
 import com.prehmus.selli.domain.model.NoteItem
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.notes.archivedItems
 import com.prehmus.selli.domain.notes.openItems
+import com.prehmus.selli.domain.repository.CloudSessionRepository
 import com.prehmus.selli.domain.repository.NoteRepository
+import com.prehmus.selli.ui.components.CloudIssue
+import com.prehmus.selli.ui.components.cloudActionMessage
+import com.prehmus.selli.ui.components.toCloudIssue
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +32,13 @@ data class IdeenUiState(
     /** Ordner, in denen zusätzlich der „Erledigt"-Bereich ausgeklappt ist. */
     val expandedArchiveFolderIds: Set<String> = emptySet(),
     val isRefreshing: Boolean = false,
+    /**
+     * Ob die Ordner seit dem Öffnen schon einmal erfolgreich geladen wurden. Erst dann ist eine
+     * leere Liste ein echter Leerzustand — vorher heißt leer nur „noch nichts bekannt".
+     */
+    val hasLoaded: Boolean = false,
+    /** Warum der angezeigte Stand nicht frisch ist; null nach erfolgreichem Laden. */
+    val loadIssue: CloudIssue? = null,
     val isCreateFolderSheetOpen: Boolean = false,
     val renamingFolder: NoteFolder? = null,
     val deletingFolder: NoteFolder? = null,
@@ -57,6 +69,7 @@ data class IdeenUiState(
 class IdeenViewModel(
     private val repository: NoteRepository,
     private val ownPerson: Person,
+    private val cloudSession: CloudSessionRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(IdeenUiState())
     val uiState: StateFlow<IdeenUiState> = _uiState.asStateFlow()
@@ -66,7 +79,29 @@ class IdeenViewModel(
     // frischere (analog CalendarViewModel.refreshJob/ExpensesViewModel).
     private var refreshJob: Job? = null
 
-    init { refresh() }
+    init {
+        refresh()
+        // Nach erfolgreicher Kontobestätigung (egal in welchem Tab) oder wiederhergestellter
+        // Verbindung selbst nachladen, statt auf das nächste Pull-to-Refresh zu warten.
+        viewModelScope.launch {
+            cloudSession.accessState.collect { state ->
+                // Nicht in einen laufenden Refresh grätschen: dessen eigener Erfolg meldet
+                // ebenfalls CONNECTED und würde ihn sonst abbrechen und neu starten.
+                val current = _uiState.value
+                if (state == CloudAccessState.CONNECTED && current.loadIssue != null && !current.isRefreshing) {
+                    refresh()
+                }
+            }
+        }
+    }
+
+    /** „Erneut versuchen": erst die Anmeldung ausdrücklich prüfen lassen, dann neu laden. */
+    fun retry() {
+        viewModelScope.launch {
+            cloudSession.ensureAccess()
+            refresh()
+        }
+    }
 
     fun refresh() {
         refreshJob?.cancel()
@@ -79,12 +114,9 @@ class IdeenViewModel(
             val foldersResult = repository.loadFoldersResult()
             val folders = foldersResult.getOrNull()
             if (folders == null) {
-                _uiState.update {
-                    it.copy(
-                        isRefreshing = false,
-                        userMessage = "Ideen konnten nicht aktualisiert werden.",
-                    )
-                }
+                // Zuletzt geladene Ordner bleiben stehen; die Hinweiskarte erklärt den Stand.
+                val issue = foldersResult.exceptionOrNull()?.toCloudIssue() ?: CloudIssue.FAILED
+                _uiState.update { it.copy(isRefreshing = false, loadIssue = issue) }
                 return@launch
             }
 
@@ -112,6 +144,8 @@ class IdeenViewModel(
                     expandedArchiveFolderIds =
                         state.expandedArchiveFolderIds.intersect(itemsByFolder.keys),
                     isRefreshing = false,
+                    hasLoaded = true,
+                    loadIssue = null,
                     userMessage = if (anyItemLoadFailed) {
                         "Manche Ideen konnten nicht aktualisiert werden."
                     } else {
@@ -166,7 +200,7 @@ class IdeenViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Ordner konnte nicht angelegt werden.")
+                        it.copy(userMessage = error.cloudActionMessage("Ordner konnte nicht angelegt werden."))
                     }
                 }
         }
@@ -185,7 +219,7 @@ class IdeenViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Ordner konnte nicht umbenannt werden.")
+                        it.copy(userMessage = error.cloudActionMessage("Ordner konnte nicht umbenannt werden."))
                     }
                 }
         }
@@ -204,7 +238,7 @@ class IdeenViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Ordner konnte nicht gelöscht werden.")
+                        it.copy(userMessage = error.cloudActionMessage("Ordner konnte nicht gelöscht werden."))
                     }
                 }
         }
@@ -231,7 +265,7 @@ class IdeenViewModel(
                     _uiState.update {
                         it.copy(
                             isSavingItem = false,
-                            userMessage = error.message ?: "Punkt konnte nicht gespeichert werden.",
+                            userMessage = error.cloudActionMessage("Punkt konnte nicht gespeichert werden."),
                         )
                     }
                 }
@@ -244,7 +278,7 @@ class IdeenViewModel(
                 .onSuccess { refresh() }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Änderung konnte nicht gespeichert werden.")
+                        it.copy(userMessage = error.cloudActionMessage("Änderung konnte nicht gespeichert werden."))
                     }
                 }
         }
@@ -263,7 +297,7 @@ class IdeenViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(userMessage = error.message ?: "Änderung konnte nicht gespeichert werden.")
+                        it.copy(userMessage = error.cloudActionMessage("Änderung konnte nicht gespeichert werden."))
                     }
                 }
         }
@@ -285,7 +319,7 @@ class IdeenViewModel(
                     _uiState.update {
                         it.copy(
                             deletingItem = null,
-                            userMessage = error.message ?: "Punkt konnte nicht gelöscht werden.",
+                            userMessage = error.cloudActionMessage("Punkt konnte nicht gelöscht werden."),
                         )
                     }
                 }
@@ -296,11 +330,15 @@ class IdeenViewModel(
     fun consumeUserMessage() = _uiState.update { it.copy(userMessage = null) }
 
     companion object {
-        fun factory(repository: NoteRepository, ownPerson: Person) =
+        fun factory(
+            repository: NoteRepository,
+            ownPerson: Person,
+            cloudSession: CloudSessionRepository,
+        ) =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    IdeenViewModel(repository, ownPerson) as T
+                    IdeenViewModel(repository, ownPerson, cloudSession) as T
             }
     }
 }

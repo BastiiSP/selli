@@ -16,6 +16,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.prehmus.selli.data.location.SelliLocationService
+import com.prehmus.selli.ui.components.CloudInitialLoading
+import com.prehmus.selli.ui.components.CloudIssueBanner
+import com.prehmus.selli.ui.components.CloudLoadFailedState
+import com.prehmus.selli.ui.components.CloudReconfirmUi
 import java.time.Instant
 import kotlinx.coroutines.delay
 
@@ -29,6 +33,8 @@ import kotlinx.coroutines.delay
 @Composable
 fun LocationScreen(
     viewModel: LocationViewModel,
+    reconfirm: CloudReconfirmUi,
+    onReconfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -60,10 +66,24 @@ fun LocationScreen(
         }
     }
 
+    val loadIssue = uiState.loadIssue
     Box(modifier = modifier.fillMaxSize()) {
         when {
             !uiState.isConfigured -> LocationEmptyHint(
                 message = "Standortfreigabe ist noch nicht eingerichtet",
+                modifier = Modifier.fillMaxSize(),
+            )
+            // Noch nie erfolgreich geladen: Fehler bzw. Laden zeigen, nicht „keine Position".
+            !uiState.hasLoaded && loadIssue != null -> CloudLoadFailedState(
+                issue = loadIssue,
+                subject = "Standorte",
+                reconfirm = reconfirm,
+                onRetry = viewModel::retry,
+                onReconfirm = onReconfirm,
+                modifier = Modifier.fillMaxSize(),
+            )
+            !uiState.hasLoaded -> CloudInitialLoading(
+                subject = "Standorte",
                 modifier = Modifier.fillMaxSize(),
             )
             uiState.locations.isEmpty() -> LocationEmptyHint(
@@ -74,6 +94,21 @@ fun LocationScreen(
                 locations = uiState.locations,
                 now = now,
                 modifier = Modifier.fillMaxSize(),
+            )
+        }
+
+        // Bereits bekannte Positionen bleiben auf der Karte; die Karte oben erklärt nur, warum
+        // sie gerade nicht frisch sind.
+        if (uiState.hasLoaded && loadIssue != null) {
+            CloudIssueBanner(
+                issue = loadIssue,
+                subject = "Standorte",
+                reconfirm = reconfirm,
+                onRetry = viewModel::retry,
+                onReconfirm = onReconfirm,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(16.dp),
             )
         }
 

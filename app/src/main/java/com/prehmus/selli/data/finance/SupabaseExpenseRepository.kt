@@ -1,6 +1,8 @@
 package com.prehmus.selli.data.finance
 
 import com.prehmus.selli.data.supabase.SelliSupabaseClient
+import com.prehmus.selli.data.supabase.classifyCloudError
+import com.prehmus.selli.data.supabase.logCloudError
 import com.prehmus.selli.domain.finance.prepareSettlement
 import com.prehmus.selli.domain.logging.CalendarLogger
 import com.prehmus.selli.domain.logging.NoOpCalendarLogger
@@ -20,49 +22,24 @@ class SupabaseExpenseRepository(
     private val logger: CalendarLogger = NoOpCalendarLogger,
 ) : ExpenseRepository {
 
-    // Etablierter Vertrag für alle Aufrufer außer settle(): jeder Fehler wird zu einer leeren
-    // Liste statt propagiert — settle() braucht stattdessen loadExpensesResult(), weil es sonst
-    // einen echten Ladefehler nicht von "es gibt wirklich keine offenen Ausgaben" unterscheiden
-    // kann (siehe dortiger Kommentar).
+    // Kompatibilitätsmethode; neue Aufrufer verwenden den fehlererhaltenden Result-Vertrag.
     override suspend fun loadExpenses(): List<Expense> = loadExpensesResult().getOrElse { emptyList() }
 
-    private suspend fun loadExpensesResult(): Result<List<Expense>> {
-        if (!client.isConfigured) return Result.success(emptyList())
-        client.ensureSignedIn().onFailure { error -> return Result.failure(error) }
-        val supabase = client.client
-            ?: return Result.failure(IllegalStateException("Supabase ist nicht konfiguriert."))
-
-        return try {
-            Result.success(
-                supabase.from(EXPENSES_TABLE)
-                    .select { order("created_at", order = Order.DESCENDING) }
-                    .decodeList<ExpenseRow>()
-                    .mapNotNull(ExpenseRow::toDomain),
-            )
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            logError(SOURCE_SELECT, error)
-            Result.failure(error)
-        }
+    override suspend fun loadExpensesResult(): Result<List<Expense>> = client.withSession { supabase ->
+        supabase.from(EXPENSES_TABLE)
+            .select { order("created_at", order = Order.DESCENDING) }
+            .decodeList<ExpenseRow>()
+            .mapNotNull(ExpenseRow::toDomain)
     }
 
-    override suspend fun loadSettlements(): List<Settlement> {
-        if (!client.isConfigured) return emptyList()
-        if (client.ensureSignedIn().isFailure) return emptyList()
-        val supabase = client.client ?: return emptyList()
+    override suspend fun loadSettlements(): List<Settlement> =
+        loadSettlementsResult().getOrElse { emptyList() }
 
-        return try {
-            supabase.from(SETTLEMENTS_TABLE)
-                .select { order("settled_at", order = Order.DESCENDING) }
-                .decodeList<SettlementRow>()
-                .mapNotNull(SettlementRow::toDomain)
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (error: Throwable) {
-            logError(SOURCE_SELECT_SETTLEMENTS, error)
-            emptyList()
-        }
+    override suspend fun loadSettlementsResult(): Result<List<Settlement>> = client.withSession { supabase ->
+        supabase.from(SETTLEMENTS_TABLE)
+            .select { order("settled_at", order = Order.DESCENDING) }
+            .decodeList<SettlementRow>()
+            .mapNotNull(SettlementRow::toDomain)
     }
 
     override suspend fun addExpense(
@@ -71,9 +48,7 @@ class SupabaseExpenseRepository(
         paidBy: Person,
         createdBy: Person,
         spentAt: LocalDate,
-    ): Result<Expense> = runCatching {
-        client.ensureSignedIn().getOrThrow()
-        val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
+    ): Result<Expense> = client.withSession { supabase ->
         val expense = Expense(
             id = UUID.randomUUID().toString(),
             amount = amount,
@@ -94,9 +69,7 @@ class SupabaseExpenseRepository(
         description: String,
         paidBy: Person,
         spentAt: LocalDate,
-    ): Result<Unit> = runCatching {
-        client.ensureSignedIn().getOrThrow()
-        val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
+    ): Result<Unit> = client.withSession { supabase ->
         supabase.from(EXPENSES_TABLE).update(
             {
                 set("amount", amount)
@@ -110,47 +83,51 @@ class SupabaseExpenseRepository(
         Unit
     }.onFailure { error -> logError(SOURCE_UPDATE, error) }
 
-    override suspend fun deleteExpense(id: String): Result<Unit> = runCatching {
-        client.ensureSignedIn().getOrThrow()
-        val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
+    override suspend fun deleteExpense(id: String): Result<Unit> = client.withSession { supabase ->
         supabase.from(EXPENSES_TABLE).delete { filter { eq("id", id) } }
         Unit
     }.onFailure { error -> logError(SOURCE_DELETE, error) }
 
-    override suspend fun settle(settledBy: Person): Result<Unit> = runCatching {
-        client.ensureSignedIn().getOrThrow()
-        val supabase = client.client ?: throw IllegalStateException("Supabase ist nicht konfiguriert.")
-        // Bewusst nicht loadExpenses(): dessen Vertrag macht aus jedem Ladefehler (z. B.
-        // offline) eine leere Liste — hier hätte das fälschlich "keine offenen Ausgaben"
-        // bedeutet und settle() wäre mit einem stillen No-op erfolgreich zurückgekehrt, ohne
-        // dass tatsächlich etwas ausgeglichen wurde.
-        val openExpenses = loadExpensesResult().getOrThrow().filter { it.settlementId == null }
-        val result = prepareSettlement(
-            expenses = openExpenses,
-            settledBy = settledBy,
-            settlementId = UUID.randomUUID().toString(),
-            now = Instant.now(),
-        )
-        if (result.settledExpenseIds.isEmpty()) return@runCatching
+    override suspend fun settle(settledBy: Person): Result<Unit> {
+        return try {
+            // Ladefehler dürfen niemals als "keine offenen Ausgaben" gelten.
+            val openExpenses = loadExpensesResult().getOrThrow().filter { it.settlementId == null }
+            val result = prepareSettlement(
+                expenses = openExpenses,
+                settledBy = settledBy,
+                settlementId = UUID.randomUUID().toString(),
+                now = Instant.now(),
+            )
+            if (result.settledExpenseIds.isEmpty()) return Result.success(Unit)
 
-        supabase.from(SETTLEMENTS_TABLE).insert(SettlementRow.from(result.settlement))
-        supabase.from(EXPENSES_TABLE).update(
-            { set("settlement_id", result.settlement.id) },
-        ) {
-            filter { isIn("id", result.settledExpenseIds) }
+            // Jede Anfrage einzeln wiederholen: ein 401 beim Update darf das bereits angelegte
+            // Settlement nicht erneut einfügen. Das bestehende zweistufige Datenmodell bleibt.
+            client.withSession { supabase ->
+                supabase.from(SETTLEMENTS_TABLE).insert(SettlementRow.from(result.settlement))
+            }.getOrThrow()
+            client.withSession { supabase ->
+                supabase.from(EXPENSES_TABLE).update(
+                    { set("settlement_id", result.settlement.id) },
+                ) {
+                    filter { isIn("id", result.settledExpenseIds) }
+                }
+                Unit
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            logError(SOURCE_SETTLE, error)
+            Result.failure(classifyCloudError(error))
         }
-        Unit
-    }.onFailure { error -> logError(SOURCE_SETTLE, error) }
+    }
 
     private fun logError(source: String, error: Throwable) {
-        runCatching { logger.error(source, error) }
+        logCloudError(logger, source, error)
     }
 
     private companion object {
         const val EXPENSES_TABLE = "expenses"
         const val SETTLEMENTS_TABLE = "settlements"
-        const val SOURCE_SELECT = "Supabase-Ausgaben laden"
-        const val SOURCE_SELECT_SETTLEMENTS = "Supabase-Ausgleiche laden"
         const val SOURCE_INSERT = "Supabase-Ausgabe anlegen"
         const val SOURCE_UPDATE = "Supabase-Ausgabe bearbeiten"
         const val SOURCE_DELETE = "Supabase-Ausgabe löschen"

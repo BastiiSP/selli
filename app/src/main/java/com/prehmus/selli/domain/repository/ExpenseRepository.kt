@@ -5,9 +5,13 @@ import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.Settlement
 import java.time.LocalDate
 
+/** Result-Fehler sind CloudSyncException; Coroutine-Abbruch wird durchgereicht. */
 interface ExpenseRepository {
     /** Alle Ausgaben, neueste zuerst. Liefert bei Problemen eine leere Liste statt zu werfen. */
     suspend fun loadExpenses(): List<Expense>
+
+    /** Ladefehler bleiben als CloudSyncException erkennbar. */
+    suspend fun loadExpensesResult(): Result<List<Expense>>
 
     /** Neue Ausgabe anlegen. Wirft nie, meldet Fehler über [Result]. */
     suspend fun addExpense(
@@ -33,4 +37,7 @@ interface ExpenseRepository {
 
     /** Alle Ausgleichsvorgänge, neueste zuerst. Liefert bei Problemen eine leere Liste statt zu werfen. */
     suspend fun loadSettlements(): List<Settlement>
+
+    /** Ladefehler bleiben als CloudSyncException erkennbar. */
+    suspend fun loadSettlementsResult(): Result<List<Settlement>>
 }

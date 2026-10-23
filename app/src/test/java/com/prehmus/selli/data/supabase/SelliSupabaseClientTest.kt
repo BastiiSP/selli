@@ -11,7 +11,8 @@ import org.junit.Test
  * Prüft nur, was ohne Netzwerk und ohne Android-Framework prüfbar ist. Alles, was den
  * eigentlichen Supabase-Client baut, ist hier bewusst NICHT getestet: `install(Auth)` braucht
  * für seinen Sitzungsspeicher den Anwendungskontext, den supabase-kt sich über androidx.startup
- * holt — im JVM-Unit-Test existiert der nicht. Der Anmeldepfad wird am Gerät verifiziert.
+ * holt — im JVM-Unit-Test existiert der nicht. Die Sitzungslogik ist separat im
+ * SupabaseSessionCoordinatorTest abgedeckt; die SDK-/Google-Integration bleibt ein Gerätetest.
  */
 class SelliSupabaseClientTest {
     @Test
@@ -59,6 +60,8 @@ class SelliSupabaseClientTest {
         private val idToken: String?,
     ) : GoogleIdTokenProvider {
         override fun lastGoogleIdToken(): String? = idToken
+        override suspend fun freshGoogleIdTokenSilently(): Result<String> =
+            Result.failure(IllegalStateException("No silent token"))
     }
 
     private companion object {

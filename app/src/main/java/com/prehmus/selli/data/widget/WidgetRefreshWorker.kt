@@ -59,8 +59,8 @@ class WidgetRefreshWorker(
             // Nach dem Snapshot und bewusst fehlertolerant: eine Panne beim Benachrichtigen darf
             // weder das frische Widget kosten noch über Result.retry() zu Doppel-Meldungen führen.
             runCatching { notifySharedEventChanges(events = events, partner = partner) }
-            runCatching { notifyNewExpenses(partner) }
-            runCatching { notifyNewNoteItems(partner) }
+            runCatching { notifyNewExpenses(partner) }.onFailure { if (it is CancellationException) throw it }
+            runCatching { notifyNewNoteItems(partner) }.onFailure { if (it is CancellationException) throw it }
 
             Result.success()
         } catch (cancelled: CancellationException) {
@@ -108,7 +108,7 @@ class WidgetRefreshWorker(
         val notifier = PartnerActivityNotifier(applicationContext)
         if (!notifier.areNotificationsEnabled()) return
 
-        val expenses = repositoryFactory().loadExpenses()
+        val expenses = repositoryFactory().loadExpensesResult().getOrThrow()
         if (expenses.isEmpty()) return
 
         val store = ExpenseSeenStore(applicationContext)
@@ -129,10 +129,10 @@ class WidgetRefreshWorker(
         val self = partner.person.other()
         val store = NoteItemSeenStore(applicationContext)
         val repository = repositoryFactory()
-        val folders = repository.loadFolders().associateBy { it.id }
+        val folders = repository.loadFoldersResult().getOrThrow().associateBy { it.id }
         if (folders.isEmpty()) return
 
-        val allItems = folders.keys.flatMap { folderId -> repository.loadItems(folderId) }
+        val allItems = folders.keys.flatMap { folderId -> repository.loadItemsResult(folderId).getOrThrow() }
         if (allItems.isEmpty()) return
 
         val alreadySeenIds = store.load()

@@ -20,7 +20,11 @@ import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.model.Settlement
 import com.prehmus.selli.domain.places.LocationSuggestion
+import com.prehmus.selli.domain.model.CloudAccessState
+import com.prehmus.selli.domain.model.CloudReconfirmResult
+import com.prehmus.selli.domain.model.LocationFeedEvent
 import com.prehmus.selli.domain.repository.CalendarRepository
+import com.prehmus.selli.domain.repository.CloudSessionRepository
 import com.prehmus.selli.domain.repository.EventCustomizationRepository
 import com.prehmus.selli.domain.repository.ExpenseRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
@@ -34,6 +38,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 
 /**
@@ -211,8 +217,8 @@ class PreviewDependencies : AppDependencies {
     // Zwei feste Positionen (Kassel / Osnabrück – die echte Fernbeziehungs-Distanz), damit die
     // Karten-Preview beide Marker zeigt, ohne Supabase und ohne Standort-Berechtigung.
     override val locationRepository: LocationRepository = object : LocationRepository {
-        override fun observeLocations(): Flow<List<PersonLocation>> = flowOf(
-            listOf(
+        override fun observeLocationFeed(): Flow<LocationFeedEvent> = flowOf(
+            LocationFeedEvent.Loaded(listOf(
                 PersonLocation(
                     person = Person.BASTI,
                     latitude = 51.3127,
@@ -231,7 +237,7 @@ class PreviewDependencies : AppDependencies {
                     isMoving = true,
                     updatedAt = Instant.now().minusSeconds(240),
                 ),
-            ),
+            )),
         )
 
         override suspend fun publishOwnLocation(location: PersonLocation): Result<Unit> =
@@ -239,6 +245,16 @@ class PreviewDependencies : AppDependencies {
     }
 
     override val isLocationSharingConfigured: Boolean = true
+
+    // Preview ist immer „verbunden" — Fehler- und Bestätigungszustände entstehen nur am Gerät.
+    override val cloudSessionRepository: CloudSessionRepository = object : CloudSessionRepository {
+        override val accessState: StateFlow<CloudAccessState> =
+            MutableStateFlow(CloudAccessState.CONNECTED)
+
+        override suspend fun ensureAccess(): Result<Unit> = Result.success(Unit)
+
+        override suspend fun reconfirmInteractively(): CloudReconfirmResult = CloudReconfirmResult.Success
+    }
 
     // In-Memory-Fake für die Ideen, damit die Preview ohne Supabase auskommt.
     override val noteRepository: NoteRepository = object : NoteRepository {
@@ -331,6 +347,8 @@ class PreviewDependencies : AppDependencies {
 
         override suspend fun loadExpenses(): List<Expense> = stored.sortedByDescending { it.createdAt }
 
+        override suspend fun loadExpensesResult(): Result<List<Expense>> = Result.success(loadExpenses())
+
         override suspend fun addExpense(
             amount: Double,
             description: String,
@@ -399,6 +417,9 @@ class PreviewDependencies : AppDependencies {
 
         override suspend fun loadSettlements(): List<Settlement> =
             storedSettlements.sortedByDescending { it.settledAt }
+
+        override suspend fun loadSettlementsResult(): Result<List<Settlement>> =
+            Result.success(loadSettlements())
     }
 
     override val calendarRepository: CalendarRepository = object : CalendarRepository {

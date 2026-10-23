@@ -13,6 +13,7 @@ import com.prehmus.selli.data.location.SupabaseLocationRepository
 import com.prehmus.selli.data.notes.JsoupLinkPreviewFetcher
 import com.prehmus.selli.data.notes.SupabaseNoteRepository
 import com.prehmus.selli.data.supabase.SelliSupabaseClient
+import com.prehmus.selli.data.supabase.SupabaseRuntime
 import com.prehmus.selli.data.widget.WidgetRefreshScheduler
 import com.prehmus.selli.data.widget.WidgetRuntime
 import com.prehmus.selli.domain.merge.DefaultCalendarMergeService
@@ -57,6 +58,19 @@ class SelliApplication : Application() {
             personResolver = { Person.BASTI },
             logger = AndroidCalendarLogger,
         )
+        // Genau EIN Supabase-Client pro Prozess — für Activity, Standortdienst und Worker.
+        // Mehrere Instanzen teilten sich früher denselben Sitzungsspeicher, rotierten den
+        // Refresh-Token aber unabhängig voneinander; ein abgelehnter Refresh löschte dann die
+        // gespeicherte Sitzung für alle. Die Anmeldung läuft hier nur still (ohne Activity);
+        // die interaktive Bestätigung hängt DefaultAppDependencies an denselben Client.
+        val supabaseClient = SelliSupabaseClient(
+            supabaseUrl = BuildConfig.SUPABASE_URL,
+            supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
+            idTokenProvider = locationGoogleRepository,
+            logger = AndroidCalendarLogger,
+        )
+        SupabaseRuntime.client = supabaseClient
+
         val locationOwnPerson = AtomicReference<Person?>(null)
         LocationRuntime.ownPersonProvider = {
             when (val session = locationGoogleRepository.sessionState()) {
@@ -66,12 +80,7 @@ class SelliApplication : Application() {
         }
         LocationRuntime.repositoryFactory = {
             SupabaseLocationRepository(
-                client = SelliSupabaseClient(
-                    supabaseUrl = BuildConfig.SUPABASE_URL,
-                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
-                    idTokenProvider = locationGoogleRepository,
-                    logger = AndroidCalendarLogger,
-                ),
+                client = supabaseClient,
                 ownPerson = {
                     checkNotNull(locationOwnPerson.get()) {
                         "Standort-Repository wurde vor der Sitzungsauflösung angefordert."
@@ -87,12 +96,7 @@ class SelliApplication : Application() {
         // AppDependencies-Graph existiert.
         WidgetRuntime.expenseRepositoryFactory = {
             SupabaseExpenseRepository(
-                client = SelliSupabaseClient(
-                    supabaseUrl = BuildConfig.SUPABASE_URL,
-                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
-                    idTokenProvider = locationGoogleRepository,
-                    logger = AndroidCalendarLogger,
-                ),
+                client = supabaseClient,
                 logger = AndroidCalendarLogger,
             )
         }
@@ -101,12 +105,7 @@ class SelliApplication : Application() {
         // Hintergrund-Lauf mit auf, ohne dass die App offen sein muss.
         WidgetRuntime.noteRepositoryFactory = {
             SupabaseNoteRepository(
-                client = SelliSupabaseClient(
-                    supabaseUrl = BuildConfig.SUPABASE_URL,
-                    supabaseAnonKey = BuildConfig.SUPABASE_ANON_KEY,
-                    idTokenProvider = locationGoogleRepository,
-                    logger = AndroidCalendarLogger,
-                ),
+                client = supabaseClient,
                 linkPreviewFetcher = JsoupLinkPreviewFetcher(logger = AndroidCalendarLogger),
                 logger = AndroidCalendarLogger,
             )

@@ -27,19 +27,25 @@ import com.google.android.gms.location.Priority
 import com.prehmus.selli.MainActivity
 import com.prehmus.selli.R
 import com.prehmus.selli.data.logging.AndroidCalendarLogger
+import com.prehmus.selli.data.supabase.SupabaseRuntime
+import com.prehmus.selli.data.supabase.logCloudError
 import com.prehmus.selli.domain.location.MOVING_DISTANCE_THRESHOLD_METERS
 import com.prehmus.selli.domain.location.MOVING_SPEED_THRESHOLD_MPS
 import com.prehmus.selli.domain.location.TrackingMode
 import com.prehmus.selli.domain.location.nextTrackingMode
 import com.prehmus.selli.domain.location.settings
+import com.prehmus.selli.domain.model.CloudAccessState
 import com.prehmus.selli.domain.model.Person
 import com.prehmus.selli.domain.model.PersonLocation
 import com.prehmus.selli.domain.repository.LocationRepository
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -53,6 +59,9 @@ class SelliLocationService : Service() {
     private var trackingMode = TrackingMode.STATIONARY
     private var lastMovementElapsedRealtime = 0L
     private val uploadMutex = Mutex()
+    private val uploadInProgress = AtomicBoolean(false)
+    private data class PendingUpload(val point: Location, val location: PersonLocation)
+    private val pendingUpload = AtomicReference<PendingUpload?>(null)
 
     @Volatile
     private var lastUploadedLocation: Location? = null
@@ -111,6 +120,11 @@ class SelliLocationService : Service() {
 
             ownPerson = resolvedPerson
             locationRepository = repository
+            serviceScope.launch {
+                SupabaseRuntime.client?.accessState?.collect { state ->
+                    if (state == CloudAccessState.CONNECTED && !uploadInProgress.get()) uploadLatestLocation()
+                }
+            }
             beginTrackingIfPermitted()
             isStarting = false
         }
@@ -171,7 +185,7 @@ class SelliLocationService : Service() {
             restartTrackingIfPermitted()
         }
 
-        val repository = locationRepository ?: return
+        if (locationRepository == null) return
         val person = ownPerson ?: return
         val personLocation = PersonLocation(
             person = person,
@@ -182,13 +196,32 @@ class SelliLocationService : Service() {
             isMoving = trackingMode == TrackingMode.MOVING,
             updatedAt = Instant.ofEpochMilli(location.time),
         )
-        val uploadedPoint = Location(location)
+        // Nur die jüngste Messung behalten, keine unbeschränkte Offline-Warteschlange.
+        val pending = PendingUpload(Location(location), personLocation)
+        pendingUpload.updateAndGet { previous ->
+            if (previous == null || previous.location.updatedAt <= personLocation.updatedAt) pending else previous
+        }
+        serviceScope.launch { uploadLatestLocation() }
+    }
 
-        serviceScope.launch {
-            uploadMutex.withLock {
-                repository.publishOwnLocation(personLocation)
-                    .onSuccess { lastUploadedLocation = uploadedPoint }
-                    .onFailure { error -> AndroidCalendarLogger.error(SOURCE_UPLOAD, error) }
+    private suspend fun uploadLatestLocation() {
+        uploadMutex.withLock {
+            val repository = locationRepository ?: return@withLock
+            val pending = pendingUpload.get() ?: return@withLock
+            uploadInProgress.set(true)
+            try {
+                repository.publishOwnLocation(pending.location)
+                    .onSuccess {
+                        lastUploadedLocation = pending.point
+                        // Eine während des Uploads neuere Messung darf nicht gelöscht werden.
+                        pendingUpload.compareAndSet(pending, null)
+                    }
+                    .onFailure { error ->
+                        logCloudError(AndroidCalendarLogger, SOURCE_UPLOAD, error)
+                        // Weiter messen, auch bei ReconfirmationRequired. Keine Activity/kein Dialog.
+                    }
+            } finally {
+                uploadInProgress.set(false)
             }
         }
     }

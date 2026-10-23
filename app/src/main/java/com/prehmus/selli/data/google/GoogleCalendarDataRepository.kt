@@ -3,11 +3,12 @@ package com.prehmus.selli.data.google
 import android.app.Activity
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.credentials.CustomCredential
 import androidx.credentials.CredentialManager
+import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.GetCredentialException
+import androidx.credentials.exceptions.NoCredentialException
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
@@ -27,6 +28,7 @@ import com.prehmus.selli.domain.model.Account
 import com.prehmus.selli.domain.model.AuthResult
 import com.prehmus.selli.domain.model.CalendarEvent
 import com.prehmus.selli.domain.model.CalendarSource
+import com.prehmus.selli.domain.model.CloudSyncException
 import com.prehmus.selli.domain.model.DateRange
 import com.prehmus.selli.domain.model.DeletionScope
 import com.prehmus.selli.domain.model.NewCalendarEvent
@@ -35,9 +37,12 @@ import com.prehmus.selli.domain.model.SessionState
 import com.prehmus.selli.domain.repository.CalendarRepository
 import com.prehmus.selli.domain.repository.GoogleCalendarRepository
 import com.prehmus.selli.domain.repository.GoogleIdTokenProvider
+import com.prehmus.selli.domain.repository.GoogleReconfirmation
+import com.prehmus.selli.domain.repository.InteractiveGoogleIdTokenProvider
 import com.prehmus.selli.domain.repository.SessionRepository
 import java.time.LocalDateTime
 import java.time.ZoneId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 
@@ -58,11 +63,19 @@ class GoogleCalendarDataRepository(
     ),
     logger: CalendarLogger = NoOpCalendarLogger,
     now: () -> Long = { System.currentTimeMillis() },
-) : GoogleCalendarRepository, CalendarRepository, SessionRepository, GoogleIdTokenProvider {
+    private val silentIdTokenSource: SilentGoogleIdTokenSource = AndroidSilentGoogleIdTokenSource(
+        context, BuildConfig.GOOGLE_SERVER_CLIENT_ID, ioDispatcher,
+    ),
+) : GoogleCalendarRepository, CalendarRepository, SessionRepository, GoogleIdTokenProvider, InteractiveGoogleIdTokenProvider {
     private val credentialManager = CredentialManager.create(context.applicationContext)
     private val eventFetcher = IndependentGoogleCalendarEventFetcher(logger)
     private val rruleFormatter = GoogleRruleFormatter(zoneId)
     private val eventCache = GoogleCalendarEventCache(now)
+    private val ownGoogleTokens = OwnGoogleAccountTokens(
+        ownEmail = { preferences.getString("$OWN_PREFIX$EMAIL_SUFFIX", null) },
+        persistToken = { persistGoogleIdToken(it) },
+        silentSource = silentIdTokenSource,
+    )
 
     override suspend fun signIn(): AuthResult {
         val activity = activity
@@ -275,6 +288,50 @@ class GoogleCalendarDataRepository(
 
     override fun lastGoogleIdToken(): String? =
         googleIdTokenOrNull(preferences.getString(KEY_GOOGLE_ID_TOKEN, null))
+
+    override suspend fun freshGoogleIdTokenSilently(): Result<String> = ownGoogleTokens.freshSilently()
+
+    override suspend fun reconfirmOwnGoogleAccount(): GoogleReconfirmation {
+        val foregroundActivity = activity
+            ?: return GoogleReconfirmation.Failed(CloudSyncException.ReconfirmationRequired())
+        val expectedEmail = preferences.getString("$OWN_PREFIX$EMAIL_SUFFIX", null)
+            ?.takeUnless(String::isBlank)
+            ?: return GoogleReconfirmation.Failed(CloudSyncException.ReconfirmationRequired())
+
+        suspend fun credential(authorizedOnly: Boolean): GoogleIdTokenCredential {
+            val request = GetCredentialRequest.Builder()
+                .addCredentialOption(
+                    GetGoogleIdOption.Builder()
+                        .setServerClientId(BuildConfig.GOOGLE_SERVER_CLIENT_ID)
+                        .setFilterByAuthorizedAccounts(authorizedOnly)
+                        .setAutoSelectEnabled(true)
+                        .build(),
+                )
+                .build()
+            val response = credentialManager.getCredential(foregroundActivity, request)
+            val custom = response.credential as? CustomCredential
+                ?: throw CloudSyncException.ReconfirmationRequired()
+            if (custom.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
+                throw CloudSyncException.ReconfirmationRequired()
+            }
+            return GoogleIdTokenCredential.createFrom(custom.data)
+        }
+
+        return try {
+            val selected = try {
+                credential(authorizedOnly = true)
+            } catch (_: NoCredentialException) {
+                credential(authorizedOnly = false)
+            }
+            ownGoogleTokens.acceptReconfirmation(expectedEmail, selected.email, selected.idToken)
+        } catch (_: GetCredentialCancellationException) {
+            GoogleReconfirmation.Cancelled
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            GoogleReconfirmation.Failed(error)
+        }
+    }
 
     private suspend fun calendar(accountEmail: String): Calendar = serviceFactory.create(accountEmail)
 
